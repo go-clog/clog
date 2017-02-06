@@ -40,17 +40,15 @@ type ConsoleConfig struct {
 
 type console struct {
 	*log.Logger
-
-	level     LEVEL
-	msgChan   chan *Message
-	quitChan  chan struct{}
-	errorChan chan<- error
+	Adapter
 }
 
 func newConsole() Logger {
 	return &console{
-		Logger:   log.New(color.Output, "", log.Ldate|log.Ltime),
-		quitChan: make(chan struct{}),
+		Logger: log.New(color.Output, "", log.Ldate|log.Ltime),
+		Adapter: Adapter{
+			quitChan: make(chan struct{}),
+		},
 	}
 }
 

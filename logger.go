@@ -30,6 +30,14 @@ type Logger interface {
 	Destroy()
 }
 
+// Adapter contains common fields for any logger adapter. This struct should be used as embedded struct.
+type Adapter struct {
+	level     LEVEL
+	msgChan   chan *Message
+	quitChan  chan struct{}
+	errorChan chan<- error
+}
+
 type Factory func() Logger
 
 // factories keeps factory function of registered loggers.
@@ -64,7 +72,7 @@ func init() {
 		for {
 			select {
 			case err := <-errorChan:
-				fmt.Println("clog: unable to write message: %v", err)
+				fmt.Printf("clog: unable to write message: %v\n", err)
 			case <-quitChan:
 				return
 			}
