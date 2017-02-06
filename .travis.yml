@@ -1,0 +1,13 @@
+sudo: false
+language: go
+go:
+  - 1.4.x
+  - 1.5.x
+  - 1.6.x
+  - 1.7.x
+  - master
+
+# TODO: uncomment test commands
+#script:
+#  - go get -v github.com/smartystreets/goconvey
+#  - go test -v -cover -race
