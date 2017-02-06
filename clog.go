@@ -125,9 +125,7 @@ func Fatal(skip int, format string, v ...interface{}) {
 
 func Shutdown() {
 	for i := range receivers {
-		receivers[i].quitChan <- struct{}{}
-		receivers[i].Flush()
-		receivers[i].Destroy()
+		receivers[i].close()
 	}
 
 	// Shutdown the error handling goroutine.

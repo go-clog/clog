@@ -15,8 +15,9 @@
 package clog
 
 import (
-	"github.com/fatih/color"
 	"log"
+
+	"github.com/fatih/color"
 )
 
 const CONSOLE MODE = "console"

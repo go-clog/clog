@@ -54,9 +54,15 @@ type receiver struct {
 	quitChan chan struct{}
 }
 
+func (r *receiver) close() {
+	r.quitChan <- struct{}{}
+	r.Flush()
+	r.Destroy()
+}
+
 var (
 	// receivers is a list of loggers with their message channel for broadcasting.
-	receivers []receiver
+	receivers []*receiver
 
 	errorChan = make(chan error, 5)
 	quitChan  = make(chan struct{})
@@ -96,9 +102,7 @@ func NewLogger(mode MODE, cfg interface{}) error {
 			hasFound = true
 
 			// Release previous logger.
-			receivers[i].quitChan <- struct{}{}
-			receivers[i].Flush()
-			receivers[i].Destroy()
+			receivers[i].close()
 
 			// Update info to new one.
 			receivers[i].Logger = logger
@@ -108,7 +112,7 @@ func NewLogger(mode MODE, cfg interface{}) error {
 		}
 	}
 	if !hasFound {
-		receivers = append(receivers, receiver{
+		receivers = append(receivers, &receiver{
 			Logger:   logger,
 			mode:     mode,
 			msgChan:  msgChan,
