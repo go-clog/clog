@@ -71,9 +71,9 @@ func (c *console) Init(v interface{}) error {
 	return nil
 }
 
-func (c *console) ExchangeChans(errorChan chan<- error) (chan *Message, chan struct{}) {
+func (c *console) ExchangeChans(errorChan chan<- error) chan *Message {
 	c.errorChan = errorChan
-	return c.msgChan, c.quitChan
+	return c.msgChan
 }
 
 func (c *console) write(msg *Message) {
@@ -81,27 +81,30 @@ func (c *console) write(msg *Message) {
 }
 
 func (c *console) Start() {
+LOOP:
 	for {
 		select {
 		case msg := <-c.msgChan:
 			c.write(msg)
 		case <-c.quitChan:
-			return
+			break LOOP
 		}
 	}
-}
 
-func (c *console) Flush() {
 	for {
 		if len(c.msgChan) == 0 {
-			return
+			break
 		}
 
 		c.write(<-c.msgChan)
 	}
+	c.quitChan <- struct{}{} // Notify the cleanup is done.
 }
 
 func (c *console) Destroy() {
+	c.quitChan <- struct{}{}
+	<-c.quitChan
+
 	close(c.msgChan)
 	close(c.quitChan)
 }

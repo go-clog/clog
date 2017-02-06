@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	_VERSION = "0.1.0"
+	_VERSION = "0.2.0"
 )
 
 // Version returns current version of the package.
@@ -65,38 +65,39 @@ type Message struct {
 }
 
 func Write(level LEVEL, skip int, format string, v ...interface{}) {
+	msg := &Message{
+		Level: level,
+	}
+
+	// Only error and fatal information needs locate position for debugging.
+	// But if skip is 0 means caller doesn't care so we can skip.
+	if msg.Level >= ERROR && skip > 0 {
+		pc, file, line, ok := runtime.Caller(skip)
+		if ok {
+			// Get caller function name.
+			fn := runtime.FuncForPC(pc)
+			var fnName string
+			if fn == nil {
+				fnName = "?()"
+			} else {
+				fnName = strings.TrimLeft(filepath.Ext(fn.Name()), ".") + "()"
+			}
+
+			if len(file) > 20 {
+				file = "..." + file[len(file)-20:]
+			}
+			msg.Body = formats[level] + fmt.Sprintf("[%s:%d %s] ", file, line, fnName) + fmt.Sprintf(format, v...)
+		}
+	}
+	if len(msg.Body) == 0 {
+		msg.Body = formats[level] + fmt.Sprintf(format, v...)
+	}
+
 	for i := range receivers {
 		if receivers[i].Level() > level {
 			continue
 		}
-		msg := &Message{
-			Level: level,
-		}
 
-		// Only error and fatal information needs locate position for debugging.
-		// But if skip is 0 means caller doesn't care so we can skip.
-		if msg.Level >= ERROR && skip > 0 {
-			pc, file, line, ok := runtime.Caller(skip)
-			if ok {
-				// Get caller function name.
-				fn := runtime.FuncForPC(pc)
-				var fnName string
-				if fn == nil {
-					fnName = "?()"
-				} else {
-					fnName = strings.TrimLeft(filepath.Ext(fn.Name()), ".") + "()"
-				}
-
-				if len(file) > 20 {
-					file = "..." + file[len(file)-20:]
-				}
-				msg.Body = formats[level] + fmt.Sprintf("[%s:%d %s] ", file, line, fnName) + fmt.Sprintf(format, v...)
-				receivers[i].msgChan <- msg
-				continue
-			}
-		}
-
-		msg.Body = formats[level] + fmt.Sprintf(format, v...)
 		receivers[i].msgChan <- msg
 	}
 }
@@ -125,7 +126,7 @@ func Fatal(skip int, format string, v ...interface{}) {
 
 func Shutdown() {
 	for i := range receivers {
-		receivers[i].close()
+		receivers[i].Destroy()
 	}
 
 	// Shutdown the error handling goroutine.

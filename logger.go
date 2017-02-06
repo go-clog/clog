@@ -22,12 +22,10 @@ type Logger interface {
 	Level() LEVEL
 	// Init accepts a config struct specific for given logger and performs any necessary initialization.
 	Init(interface{}) error
-	// ExchangeChans accepts error channel, and returns message receive and quit channels.
-	ExchangeChans(chan<- error) (chan *Message, chan struct{})
+	// ExchangeChans accepts error channel, and returns message receive channel.
+	ExchangeChans(chan<- error) chan *Message
 	// Start starts message processing.
 	Start()
-	// Flush makes sure all messages have been written to the output and safe to exit.
-	Flush()
 	// Destroy releases all resources.
 	Destroy()
 }
@@ -49,15 +47,8 @@ func Register(mode MODE, f Factory) {
 
 type receiver struct {
 	Logger
-	mode     MODE
-	msgChan  chan *Message
-	quitChan chan struct{}
-}
-
-func (r *receiver) close() {
-	r.quitChan <- struct{}{}
-	r.Flush()
-	r.Destroy()
+	mode    MODE
+	msgChan chan *Message
 }
 
 var (
@@ -93,7 +84,7 @@ func NewLogger(mode MODE, cfg interface{}) error {
 	if err := logger.Init(cfg); err != nil {
 		return fmt.Errorf("fail to initialize: %v", err)
 	}
-	msgChan, quitChan := logger.ExchangeChans(errorChan)
+	msgChan := logger.ExchangeChans(errorChan)
 
 	// Check and replace previous logger.
 	hasFound := false
@@ -102,21 +93,19 @@ func NewLogger(mode MODE, cfg interface{}) error {
 			hasFound = true
 
 			// Release previous logger.
-			receivers[i].close()
+			receivers[i].Destroy()
 
 			// Update info to new one.
 			receivers[i].Logger = logger
 			receivers[i].msgChan = msgChan
-			receivers[i].quitChan = quitChan
 			break
 		}
 	}
 	if !hasFound {
 		receivers = append(receivers, &receiver{
-			Logger:   logger,
-			mode:     mode,
-			msgChan:  msgChan,
-			quitChan: quitChan,
+			Logger:  logger,
+			mode:    mode,
+			msgChan: msgChan,
 		})
 	}
 
