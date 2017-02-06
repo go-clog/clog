@@ -1,4 +1,4 @@
-# Clog
+# Clog [![Build Status](https://travis-ci.org/go-clog/clog.svg?branch=master)](https://travis-ci.org/go-clog/clog)
 
 Clog is a channel-based logging package for Go.
 
