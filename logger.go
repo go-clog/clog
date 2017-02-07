@@ -91,7 +91,7 @@ func NewLogger(mode MODE, cfg interface{}) error {
 
 	logger := factory()
 	if err := logger.Init(cfg); err != nil {
-		return fmt.Errorf("fail to initialize: %v", err)
+		return err
 	}
 	msgChan := logger.ExchangeChans(errorChan)
 

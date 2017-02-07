@@ -7,7 +7,7 @@ go:
   - 1.7.x
   - master
 
-# TODO: uncomment test commands
-#script:
-#  - go get -v github.com/smartystreets/goconvey
-#  - go test -v -cover -race
+script:
+ - go get -v github.com/smartystreets/goconvey
+ - make test
+ - make vet

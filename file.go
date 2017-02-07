@@ -30,6 +30,7 @@ const (
 	LAST_WRITE_FILENAME           = ".clog-lastwrite"
 	LAST_WRITE_FORMAT             = "2006-01-02 MST"
 	LAST_WRITE_FORMAT_SIMPLE      = "2006-01-02"
+	LOG_PREFIX_LENGTH             = len("2017/02/06 21:20:08 ")
 )
 
 // FileRotationConfig represents rotation related configurations for file mode logger.
@@ -39,7 +40,7 @@ type FileRotationConfig struct {
 	Rotate bool
 	// Rotate on daily basis.
 	Daily bool
-	// Maximum size of file for a rotation.
+	// Maximum size in bytes of file for a rotation.
 	MaxSize int64
 	// Maximum number of lines for a rotation.
 	MaxLines int64
@@ -222,8 +223,8 @@ func (f *file) write(msg *Message) {
 	f.Logger.Print(msg.Body)
 
 	if f.rotate.Rotate {
-		f.currentSize += 20 + int64(len(msg.Body)) // 20 for "2017/02/06 21:20:08 "
-		f.currentLines++                           // TODO: should I care if log message itself contains new lines?
+		f.currentSize += int64(LOG_PREFIX_LENGTH + len(msg.Body))
+		f.currentLines++ // TODO: should I care if log message itself contains new lines?
 
 		var (
 			needsRotate = false
@@ -243,7 +244,6 @@ func (f *file) write(msg *Message) {
 
 		if needsRotate {
 			f.file.Close()
-
 			if err := os.Rename(f.filename, f.rotateFilename(rotateDate.Format(LAST_WRITE_FORMAT_SIMPLE))); err != nil {
 				f.errorChan <- fmt.Errorf("fail to rename rotate file '%s': %v", f.filename, err)
 			}
