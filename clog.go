@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	_VERSION = "0.2.1"
+	_VERSION = "0.2.2"
 )
 
 // Version returns current version of the package.
@@ -136,7 +136,6 @@ func Shutdown() {
 			break
 		}
 
-		err := <-errorChan
-		fmt.Println("clog: unable to write message: %v", err)
+		fmt.Printf("clog: unable to write message: %v\n", <-errorChan)
 	}
 }

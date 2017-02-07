@@ -21,6 +21,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -116,6 +117,76 @@ func (f *file) rotateFilename(date string) string {
 	panic("too many log files for yesterday")
 }
 
+func (f *file) deleteOutdatedFiles() {
+	filepath.Walk(filepath.Dir(f.filename), func(path string, info os.FileInfo, err error) error {
+		if !info.IsDir() &&
+			info.ModTime().Before(time.Now().Add(-24*time.Hour*time.Duration(f.rotate.MaxDays))) &&
+			strings.HasPrefix(filepath.Base(path), filepath.Base(f.filename)) {
+			os.Remove(path)
+		}
+		return nil
+	})
+}
+
+func (f *file) initRotate() error {
+	// Gather basic file info for rotation.
+	fi, err := f.file.Stat()
+	if err != nil {
+		return fmt.Errorf("Stat: %v", err)
+	}
+
+	f.currentSize = fi.Size()
+
+	// If there is any content in the file, count the number of lines.
+	if f.rotate.MaxLines > 0 && f.currentSize > 0 {
+		data, err := ioutil.ReadFile(f.filename)
+		if err != nil {
+			return fmt.Errorf("ReadFile '%s': %v", f.filename, err)
+		}
+
+		f.currentLines = int64(bytes.Count(data, newLineBytes)) + 1
+	}
+
+	if f.rotate.Daily {
+		now := time.Now()
+		f.openDay = now.Day()
+
+		// Load last write time if present.
+		lastWritePath := filepath.Join(filepath.Dir(f.filename), LAST_WRITE_FILENAME)
+		if isExist(lastWritePath) {
+			data, err := ioutil.ReadFile(lastWritePath)
+			if err != nil {
+				return fmt.Errorf("ReadFile '%s': %v", lastWritePath, err)
+			}
+			lastWriteTime, err := time.Parse(LAST_WRITE_FORMAT, string(data))
+			if err == nil &&
+				(lastWriteTime.Year() != now.Year() ||
+					lastWriteTime.Month() != now.Month() ||
+					lastWriteTime.Day() != now.Day()) {
+
+				f.file.Close()
+				if err = os.Rename(f.filename, f.rotateFilename(lastWriteTime.Format(LAST_WRITE_FORMAT_SIMPLE))); err != nil {
+					return fmt.Errorf("Rename: %v", err)
+				}
+
+				if err = f.initFile(); err != nil {
+					return fmt.Errorf("initFile: %v", err)
+				}
+			}
+		}
+
+		// Save new write time.
+		if err = ioutil.WriteFile(lastWritePath, []byte(now.Format(LAST_WRITE_FORMAT)), 0660); err != nil {
+			return fmt.Errorf("WriteFile '%s': %v", lastWritePath, err)
+		}
+	}
+
+	if f.rotate.MaxDays > 0 {
+		f.deleteOutdatedFiles()
+	}
+	return nil
+}
+
 func (f *file) Init(v interface{}) (err error) {
 	cfg, ok := v.(FileConfig)
 	if !ok {
@@ -128,68 +199,14 @@ func (f *file) Init(v interface{}) (err error) {
 	f.level = cfg.Level
 
 	f.filename = cfg.Filename
+	os.MkdirAll(filepath.Dir(f.filename), os.ModePerm)
 	if err = f.initFile(); err != nil {
 		return fmt.Errorf("initFile: %v", err)
 	}
 
-	// Gather basic file info for rotation.
 	f.rotate = cfg.FileRotationConfig
 	if f.rotate.Rotate {
-		fi, err := f.file.Stat()
-		if err != nil {
-			return fmt.Errorf("Stat: %v", err)
-		}
-
-		f.currentSize = fi.Size()
-
-		// If there is any content in the file, count the number of lines.
-		if f.rotate.MaxLines > 0 && f.currentSize > 0 {
-			data, err := ioutil.ReadFile(f.filename)
-			if err != nil {
-				return fmt.Errorf("ReadFile '%s': %v", f.filename, err)
-			}
-
-			f.currentLines = int64(bytes.Count(data, newLineBytes)) + 1
-		}
-
-		// Setup timer for next rotation of day.
-		if f.rotate.Daily {
-			now := time.Now()
-			f.openDay = now.Day()
-
-			// Load last write time if present.
-			lastWritePath := filepath.Join(filepath.Dir(f.filename), LAST_WRITE_FILENAME)
-			if isExist(lastWritePath) {
-				data, err := ioutil.ReadFile(lastWritePath)
-				if err != nil {
-					return fmt.Errorf("ReadFile '%s': %v", lastWritePath, err)
-				}
-				lastWriteTime, err := time.Parse(LAST_WRITE_FORMAT, string(data))
-				if err == nil &&
-					(lastWriteTime.Year() != now.Year() ||
-						lastWriteTime.Month() != now.Month() ||
-						lastWriteTime.Day() != now.Day()) {
-
-					f.file.Close()
-					if err = os.Rename(f.filename, f.rotateFilename(lastWriteTime.Format(LAST_WRITE_FORMAT_SIMPLE))); err != nil {
-						return fmt.Errorf("Rename: %v", err)
-					}
-
-					if err = f.initFile(); err != nil {
-						return fmt.Errorf("initFile: %v", err)
-					}
-				}
-			}
-
-			// Save new write time.
-			if err = ioutil.WriteFile(lastWritePath, []byte(now.Format(LAST_WRITE_FORMAT)), 0660); err != nil {
-				return fmt.Errorf("WriteFile '%s': %v", lastWritePath, err)
-			}
-		}
-
-		// Delete outdated files.
-		if f.rotate.MaxDays > 0 {
-		}
+		f.initRotate()
 	}
 
 	f.msgChan = make(chan *Message, cfg.BufferSize)
@@ -203,6 +220,43 @@ func (f *file) ExchangeChans(errorChan chan<- error) chan *Message {
 
 func (f *file) write(msg *Message) {
 	f.Logger.Print(msg.Body)
+
+	if f.rotate.Rotate {
+		f.currentSize += 20 + int64(len(msg.Body)) // 20 for "2017/02/06 21:20:08 "
+		f.currentLines++                           // TODO: should I care if log message itself contains new lines?
+
+		var (
+			needsRotate = false
+			rotateDate  time.Time
+		)
+
+		now := time.Now()
+		if f.rotate.Daily && now.Day() != f.openDay {
+			needsRotate = true
+			rotateDate = now.Add(-24 * time.Hour)
+
+		} else if (f.rotate.MaxSize > 0 && f.currentSize >= f.rotate.MaxSize) ||
+			(f.rotate.MaxLines > 0 && f.currentLines >= f.rotate.MaxLines) {
+			needsRotate = true
+			rotateDate = now
+		}
+
+		if needsRotate {
+			f.file.Close()
+
+			if err := os.Rename(f.filename, f.rotateFilename(rotateDate.Format(LAST_WRITE_FORMAT_SIMPLE))); err != nil {
+				f.errorChan <- fmt.Errorf("fail to rename rotate file '%s': %v", f.filename, err)
+			}
+
+			if err := f.initFile(); err != nil {
+				f.errorChan <- fmt.Errorf("fail to init log file '%s': %v", f.filename, err)
+			}
+
+			f.openDay = now.Day()
+			f.currentSize = 0
+			f.currentLines = 0
+		}
+	}
 }
 
 func (f *file) Start() {

@@ -68,6 +68,7 @@ var (
 )
 
 func init() {
+	// Start background error handling goroutine.
 	go func() {
 		for {
 			select {
