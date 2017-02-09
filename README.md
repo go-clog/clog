@@ -52,7 +52,6 @@ func init() {
 	log.Trace("Hello %s!", "Clog")
 	// Output: Hello Clog!
 
-
 	log.Info("Hello %s!", "Clog")
 	log.Warn("Hello %s!", "Clog")
 	...
@@ -78,7 +77,7 @@ In production, you may want to make log less verbose and asynchronous:
 ...
 	err := log.New(log.CONSOLE, log.ConsoleConfig{
 		// Logs under INFO level (in this case TRACE) will be discarded
-		Level:      log.Info, 
+		Level:      log.INFO, 
 		// Number mainly depends on how many logs will be produced by program, 100 is good enough
 		BufferSize: 100,      
 	})
@@ -114,7 +113,7 @@ File logger is more complex than console, and it has ability to rotate:
 ```go
 ...
 	err := log.New(log.FILE, log.FileConfig{
-		Level:              log.Info, 
+		Level:              log.INFO, 
 		BufferSize:         100,  
 		Filename:           "clog.log",  
 		FileRotationConfig: log.FileRotationConfig {
