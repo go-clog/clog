@@ -22,8 +22,8 @@ import (
 
 const CONSOLE MODE = "console"
 
-// Color set for different levels.
-var colors = []func(a ...interface{}) string{
+// Console color set for different levels.
+var consoleColors = []func(a ...interface{}) string{
 	color.New(color.FgBlue).SprintFunc(),   // Trace
 	color.New(color.FgGreen).SprintFunc(),  // Info
 	color.New(color.FgYellow).SprintFunc(), // Warn
@@ -75,7 +75,7 @@ func (c *console) ExchangeChans(errorChan chan<- error) chan *Message {
 }
 
 func (c *console) write(msg *Message) {
-	c.Logger.Print(colors[msg.Level](msg.Body))
+	c.Logger.Print(consoleColors[msg.Level](msg.Body))
 }
 
 func (c *console) Start() {

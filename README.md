@@ -124,6 +124,20 @@ File logger is more complex than console, and it has ability to rotate:
 ...
 ```
 
+## Slack
+
+Slack logger is also supported in a simple way:
+
+```go
+...
+	err := log.New(log.SLACK, log.SlackConfig{
+		Level:              log.INFO, 
+		BufferSize:         100,  
+		URL:                "https://url-to-slack-webhook",  
+	})
+...
+```
+
 ## Credits
 
 - Avatar is a modified version based on [egonelbre/gophers' scientist](https://github.com/egonelbre/gophers/blob/master/vector/science/scientist.svg).
