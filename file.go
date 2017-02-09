@@ -26,11 +26,9 @@ import (
 )
 
 const (
-	FILE                     MODE = "file"
-	LAST_WRITE_FILENAME           = ".clog-lastwrite"
-	LAST_WRITE_FORMAT             = "2006-01-02 MST"
-	LAST_WRITE_FORMAT_SIMPLE      = "2006-01-02"
-	LOG_PREFIX_LENGTH             = len("2017/02/06 21:20:08 ")
+	FILE               MODE = "file"
+	SIMPLE_DATE_FORMAT      = "2006-01-02"
+	LOG_PREFIX_LENGTH       = len("2017/02/06 21:20:08 ")
 )
 
 // FileRotationConfig represents rotation related configurations for file mode logger.
@@ -83,13 +81,6 @@ func (f *file) Level() LEVEL { return f.level }
 
 var newLineBytes = []byte("\n")
 
-// isExist checks whether a file or directory exists.
-// It returns false when the file or directory does not exist.
-func isExist(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil || os.IsExist(err)
-}
-
 func (f *file) initFile() (err error) {
 	f.file, err = os.OpenFile(f.filename, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0660)
 	if err != nil {
@@ -98,6 +89,13 @@ func (f *file) initFile() (err error) {
 
 	f.Logger = log.New(f.file, "", log.Ldate|log.Ltime)
 	return nil
+}
+
+// isExist checks whether a file or directory exists.
+// It returns false when the file or directory does not exist.
+func isExist(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil || os.IsExist(err)
 }
 
 // rotateFilename returns next available rotate filename with given date.
@@ -152,33 +150,21 @@ func (f *file) initRotate() error {
 		now := time.Now()
 		f.openDay = now.Day()
 
-		// Load last write time if present.
-		lastWritePath := filepath.Join(filepath.Dir(f.filename), LAST_WRITE_FILENAME)
-		if isExist(lastWritePath) {
-			data, err := ioutil.ReadFile(lastWritePath)
-			if err != nil {
-				return fmt.Errorf("ReadFile '%s': %v", lastWritePath, err)
+		lastWriteTime := fi.ModTime()
+		if lastWriteTime.Year() != now.Year() ||
+			lastWriteTime.Month() != now.Month() ||
+			lastWriteTime.Day() != now.Day() {
+
+			if err = f.file.Close(); err != nil {
+				return fmt.Errorf("Close: %v", err)
 			}
-			lastWriteTime, err := time.Parse(LAST_WRITE_FORMAT, string(data))
-			if err == nil &&
-				(lastWriteTime.Year() != now.Year() ||
-					lastWriteTime.Month() != now.Month() ||
-					lastWriteTime.Day() != now.Day()) {
-
-				f.file.Close()
-				if err = os.Rename(f.filename, f.rotateFilename(lastWriteTime.Format(LAST_WRITE_FORMAT_SIMPLE))); err != nil {
-					return fmt.Errorf("Rename: %v", err)
-				}
-
-				if err = f.initFile(); err != nil {
-					return fmt.Errorf("initFile: %v", err)
-				}
+			if err = os.Rename(f.filename, f.rotateFilename(lastWriteTime.Format(SIMPLE_DATE_FORMAT))); err != nil {
+				return fmt.Errorf("Rename: %v", err)
 			}
-		}
 
-		// Save new write time.
-		if err = ioutil.WriteFile(lastWritePath, []byte(now.Format(LAST_WRITE_FORMAT)), 0660); err != nil {
-			return fmt.Errorf("WriteFile '%s': %v", lastWritePath, err)
+			if err = f.initFile(); err != nil {
+				return fmt.Errorf("initFile: %v", err)
+			}
 		}
 	}
 
@@ -244,7 +230,7 @@ func (f *file) write(msg *Message) {
 
 		if needsRotate {
 			f.file.Close()
-			if err := os.Rename(f.filename, f.rotateFilename(rotateDate.Format(LAST_WRITE_FORMAT_SIMPLE))); err != nil {
+			if err := os.Rename(f.filename, f.rotateFilename(rotateDate.Format(SIMPLE_DATE_FORMAT))); err != nil {
 				f.errorChan <- fmt.Errorf("fail to rename rotate file '%s': %v", f.filename, err)
 			}
 
