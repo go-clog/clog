@@ -1,4 +1,4 @@
-# Clog [![Build Status](https://travis-ci.org/go-clog/clog.svg?branch=master)](https://travis-ci.org/go-clog/clog)
+# Clog [![Build Status](https://travis-ci.org/go-clog/clog.svg?branch=master)](https://travis-ci.org/go-clog/clog) [![GoDoc](https://godoc.org/gopkg.in/clog.v1?status.svg)](https://godoc.org/gopkg.in/clog.v1)
 
 ![](https://avatars1.githubusercontent.com/u/25576866?v=3&s=200)
 
@@ -106,6 +106,24 @@ When using `log.Error` and `log.Fatal` functions, the first argument allows you 
 ```
 
 Calling `log.Fatal` will exit the program.
+
+## File
+
+File logger is more complex than console, and it has ability to rotate:
+
+```go
+...
+	err := log.New(log.FILE, log.FileConfig{
+		Level:              log.Info, 
+		BufferSize:         100,  
+		Filename:           "clog.log",  
+		FileRotationConfig: log.FileRotationConfig {
+			Rotate: true,
+			Daily:  true,
+		},
+	})
+...
+```
 
 ## Credits
 
