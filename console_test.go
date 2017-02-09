@@ -23,17 +23,17 @@ import (
 func Test_console_Init(t *testing.T) {
 	Convey("Init console logger", t, func() {
 		Convey("Mismatched config object", func() {
-			err := NewLogger(CONSOLE, struct{}{})
+			err := New(CONSOLE, struct{}{})
 			So(err, ShouldNotBeNil)
 			_, ok := err.(ErrConfigObject)
 			So(ok, ShouldBeTrue)
 		})
 
 		Convey("Valid config object", func() {
-			So(NewLogger(CONSOLE, ConsoleConfig{}), ShouldBeNil)
+			So(New(CONSOLE, ConsoleConfig{}), ShouldBeNil)
 
 			Convey("Incorrect level", func() {
-				err := NewLogger(CONSOLE, ConsoleConfig{
+				err := New(CONSOLE, ConsoleConfig{
 					Level: LEVEL(-1),
 				})
 				So(err, ShouldNotBeNil)

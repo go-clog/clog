@@ -81,9 +81,9 @@ func init() {
 	}()
 }
 
-// NewLogger initializes and appends a new logger to the receiver list.
+// New initializes and appends a new logger to the receiver list.
 // Calling this function multiple times will overwrite previous logger with same mode.
-func NewLogger(mode MODE, cfg interface{}) error {
+func New(mode MODE, cfg interface{}) error {
 	factory, ok := factories[mode]
 	if !ok {
 		return fmt.Errorf("unknown mode '%s'", mode)
@@ -120,4 +120,22 @@ func NewLogger(mode MODE, cfg interface{}) error {
 
 	go logger.Start()
 	return nil
+}
+
+// Delete removes logger from the receiver list.
+func Delete(mode MODE) {
+	foundIdx := -1
+	for i := range receivers {
+		if receivers[i].mode == mode {
+			foundIdx = i
+			receivers[i].Destroy()
+		}
+	}
+
+	if foundIdx >= 0 {
+		newList := make([]*receiver, len(receivers)-1)
+		copy(newList, receivers[:foundIdx])
+		copy(newList[foundIdx:], receivers[foundIdx+1:])
+		receivers = newList
+	}
 }

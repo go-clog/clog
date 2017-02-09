@@ -23,19 +23,19 @@ import (
 func Test_file_Init(t *testing.T) {
 	Convey("Init file logger", t, func() {
 		Convey("With mismatched config object", func() {
-			err := NewLogger(FILE, struct{}{})
+			err := New(FILE, struct{}{})
 			So(err, ShouldNotBeNil)
 			_, ok := err.(ErrConfigObject)
 			So(ok, ShouldBeTrue)
 		})
 
 		Convey("With valid config object", func() {
-			So(NewLogger(FILE, FileConfig{
+			So(New(FILE, FileConfig{
 				Filename: "test/test.log",
 			}), ShouldBeNil)
 
 			Convey("Incorrect level", func() {
-				err := NewLogger(FILE, FileConfig{
+				err := New(FILE, FileConfig{
 					Level: LEVEL(-1),
 				})
 				So(err, ShouldNotBeNil)
@@ -44,7 +44,7 @@ func Test_file_Init(t *testing.T) {
 			})
 
 			Convey("Empty file name", func() {
-				err := NewLogger(FILE, FileConfig{})
+				err := New(FILE, FileConfig{})
 				So(err, ShouldNotBeNil)
 				So(err.Error(), ShouldEqual, "initFile: OpenFile '': open : no such file or directory")
 			})
