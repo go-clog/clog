@@ -1,5 +1,7 @@
 # Clog [![Build Status](https://travis-ci.org/go-clog/clog.svg?branch=master)](https://travis-ci.org/go-clog/clog)
 
+![](https://avatars1.githubusercontent.com/u/25576866?v=3&s=200)
+
 Clog is a channel-based logging package for Go.
 
 This package supports multiple logger adapters across different levels of logging. It uses Go's native channel feature to provide goroutine-safe mechanism on large concurrency.
@@ -24,6 +26,9 @@ If you want to test on your machine, please apply `-t` flag:
 
 Please apply `-u` flag to update in the future.
 
+## Credits
+
+- Avatar is a modified version based on [egonelbre/gophers' scientist](https://github.com/egonelbre/gophers/blob/master/vector/science/scientist.svg).
 
 ## License
 
