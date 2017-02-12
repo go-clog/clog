@@ -39,4 +39,10 @@ func Test_Register(t *testing.T) {
 		Register("test", newConsole)
 		Register("test", newConsole)
 	})
+
+	Convey("Create non-registered logger", t, func() {
+		err := New(MODE("404"), nil)
+		So(err, ShouldNotBeNil)
+		So(err.Error(), ShouldContainSubstring, "unknown mode")
+	})
 }

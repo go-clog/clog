@@ -15,6 +15,8 @@
 package clog
 
 import (
+	"bytes"
+	"sync"
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -32,5 +34,129 @@ func Test_isValidLevel(t *testing.T) {
 		So(isValidLevel(LEVEL(5)), ShouldBeFalse)
 		So(isValidLevel(TRACE), ShouldBeTrue)
 		So(isValidLevel(FATAL), ShouldBeTrue)
+	})
+}
+
+const _MEMORY MODE = "memory"
+
+type memoryConfig struct {
+	// Minimum level of messages to be processed.
+	Level LEVEL
+	// Buffer size defines how many messages can be queued before hangs.
+	BufferSize int64
+}
+
+var (
+	buf bytes.Buffer
+	wg  sync.WaitGroup
+)
+
+type memory struct {
+	Adapter
+}
+
+func newMemory() Logger {
+	return &memory{
+		Adapter: Adapter{
+			quitChan: make(chan struct{}),
+		},
+	}
+}
+
+func (m *memory) Level() LEVEL { return m.level }
+
+func (m *memory) Init(v interface{}) error {
+	cfg, ok := v.(memoryConfig)
+	if !ok {
+		return ErrConfigObject{"memoryConfig", v}
+	}
+
+	if !isValidLevel(cfg.Level) {
+		return ErrInvalidLevel{}
+	}
+	m.level = cfg.Level
+
+	m.msgChan = make(chan *Message, cfg.BufferSize)
+	return nil
+}
+
+func (m *memory) ExchangeChans(errorChan chan<- error) chan *Message {
+	m.errorChan = errorChan
+	return m.msgChan
+}
+
+func (m *memory) write(msg *Message) {
+	buf.WriteString(msg.Body)
+	wg.Done()
+}
+
+func (m *memory) Start() {
+LOOP:
+	for {
+		select {
+		case msg := <-m.msgChan:
+			m.write(msg)
+		case <-m.quitChan:
+			break LOOP
+		}
+	}
+
+	for {
+		if len(m.msgChan) == 0 {
+			break
+		}
+
+		m.write(<-m.msgChan)
+	}
+	m.quitChan <- struct{}{} // Notify the cleanup is done.
+}
+
+func (m *memory) Destroy() {
+	m.quitChan <- struct{}{}
+	<-m.quitChan
+
+	close(m.msgChan)
+	close(m.quitChan)
+}
+
+func init() {
+	Register(_MEMORY, newMemory)
+}
+
+func Test_Clog(t *testing.T) {
+	Convey("In-memory logging", t, func() {
+		So(New(_MEMORY, memoryConfig{}), ShouldBeNil)
+
+		Convey("Basic logging", func() {
+			wg.Add(1)
+			Trace("Level: %v", TRACE)
+			wg.Wait()
+			So(buf.String(), ShouldEqual, "[TRACE] Level: 0")
+			buf.Reset()
+
+			wg.Add(1)
+			Info("Level: %v", INFO)
+			wg.Wait()
+			So(buf.String(), ShouldEqual, "[ INFO] Level: 1")
+			buf.Reset()
+
+			wg.Add(1)
+			Warn("Level: %v", WARN)
+			wg.Wait()
+			So(buf.String(), ShouldEqual, "[ WARN] Level: 2")
+			buf.Reset()
+
+			wg.Add(1)
+			Error(0, "Level: %v", ERROR)
+			wg.Wait()
+			So(buf.String(), ShouldEqual, "[ERROR] Level: 3")
+			buf.Reset()
+
+			wg.Add(1)
+			Error(2, "Level: %v", ERROR)
+			wg.Wait()
+			So(buf.String(), ShouldContainSubstring, "clog.v1/clog_test.go")
+			buf.Reset()
+		})
 	})
 }

@@ -35,7 +35,7 @@ const (
 
 var slackColors = []string{
 	"",        // Trace
-	"blue",    // Info
+	"#3aa3e3", // Info
 	"warning", // Warn
 	"danger",  // Error
 	"#ff0200", // Fatal
