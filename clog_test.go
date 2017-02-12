@@ -155,7 +155,7 @@ func Test_Clog(t *testing.T) {
 			wg.Add(1)
 			Error(2, "Level: %v", ERROR)
 			wg.Wait()
-			So(buf.String(), ShouldContainSubstring, "clog.v1/clog_test.go")
+			So(buf.String(), ShouldContainSubstring, "clog_test.go")
 			buf.Reset()
 		})
 	})
