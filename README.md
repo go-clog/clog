@@ -138,6 +138,8 @@ Slack logger is also supported in a simple way:
 ...
 ```
 
+This logger also works for [Discord Slack](https://discordapp.com/developers/docs/resources/webhook#execute-slackcompatible-webhook) endpoint.
+
 ## Credits
 
 - Avatar is a modified version based on [egonelbre/gophers' scientist](https://github.com/egonelbre/gophers/blob/master/vector/science/scientist.svg).
