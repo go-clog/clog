@@ -15,6 +15,8 @@
 package clog
 
 import (
+	"io/ioutil"
+	"os"
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -49,5 +51,19 @@ func Test_file_Init(t *testing.T) {
 				So(err.Error(), ShouldEqual, "initFile: OpenFile '': open : no such file or directory")
 			})
 		})
+	})
+}
+
+func Test_file_rotateFilename(t *testing.T) {
+	Convey("Get rotate filename", t, func() {
+		f := &file{
+			filename: "test/test.log",
+		}
+		os.Remove("test/test.log.2017-03-05")
+		So(f.rotateFilename("2017-03-05"), ShouldEqual, "test/test.log.2017-03-05")
+
+		// Pretend one log file already exists
+		ioutil.WriteFile("test/test.log.2017-03-05", []byte(""), os.ModePerm)
+		So(f.rotateFilename("2017-03-05"), ShouldEqual, "test/test.log.2017-03-05.001")
 	})
 }

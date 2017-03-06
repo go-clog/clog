@@ -128,35 +128,46 @@ func Test_Clog(t *testing.T) {
 		So(New(_MEMORY, memoryConfig{}), ShouldBeNil)
 
 		Convey("Basic logging", func() {
+			buf.Reset()
 			wg.Add(1)
 			Trace("Level: %v", TRACE)
 			wg.Wait()
 			So(buf.String(), ShouldEqual, "[TRACE] Level: 0")
-			buf.Reset()
 
+			buf.Reset()
 			wg.Add(1)
 			Info("Level: %v", INFO)
 			wg.Wait()
 			So(buf.String(), ShouldEqual, "[ INFO] Level: 1")
-			buf.Reset()
 
+			buf.Reset()
 			wg.Add(1)
 			Warn("Level: %v", WARN)
 			wg.Wait()
 			So(buf.String(), ShouldEqual, "[ WARN] Level: 2")
-			buf.Reset()
 
+			buf.Reset()
 			wg.Add(1)
 			Error(0, "Level: %v", ERROR)
 			wg.Wait()
 			So(buf.String(), ShouldEqual, "[ERROR] Level: 3")
-			buf.Reset()
 
+			buf.Reset()
 			wg.Add(1)
 			Error(2, "Level: %v", ERROR)
 			wg.Wait()
 			So(buf.String(), ShouldContainSubstring, "clog_test.go")
-			buf.Reset()
 		})
+	})
+
+	Convey("Skip logs has lower level", t, func() {
+		So(New(_MEMORY, memoryConfig{
+			Level: ERROR,
+		}), ShouldBeNil)
+
+		buf.Reset()
+		Trace("Level: %v", TRACE)
+		Trace("Level: %v", INFO)
+		So(buf.String(), ShouldEqual, "")
 	})
 }

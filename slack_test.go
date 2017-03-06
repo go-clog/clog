@@ -45,3 +45,19 @@ func Test_slack_Init(t *testing.T) {
 		})
 	})
 }
+
+func Test_buildSlackAttchment(t *testing.T) {
+	Convey("Build Slack attachment", t, func() {
+		So(buildSlackAttachment(&Message{
+			Level: INFO,
+			Body:  "test message",
+		}), ShouldEqual, `{
+	"attachments": [
+		{
+			"text": "test message",
+			"color": "#3aa3e3"
+		}
+	]
+}`)
+	})
+}
