@@ -47,8 +47,8 @@ const (
 
 var formats = map[LEVEL]string{
 	TRACE: "[TRACE] ",
-	INFO:  "[ INFO] ",
-	WARN:  "[ WARN] ",
+	INFO:  "[INFO] ",
+	WARN:  "[WARN] ",
 	ERROR: "[ERROR] ",
 	FATAL: "[FATAL] ",
 }
