@@ -1,4 +1,4 @@
-// Copyright 2017 Unknwon
+// Copyright 2018 Unknwon
 //
 // Licensed under the Apache License, Version 2.0 (the "License"): you may
 // not use this file except in compliance with the License. You may obtain
@@ -15,23 +15,24 @@
 package clog
 
 import (
+	"encoding/json"
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-func Test_slack_Init(t *testing.T) {
-	Convey("Init Slack logger", t, func() {
+func Test_discord_Init(t *testing.T) {
+	Convey("Init Discord logger", t, func() {
 		Convey("Mismatched config object", func() {
-			err := New(SLACK, struct{}{})
+			err := New(DISCORD, struct{}{})
 			So(err, ShouldNotBeNil)
 			_, ok := err.(ErrConfigObject)
 			So(ok, ShouldBeTrue)
 		})
 
 		Convey("Valid config object", func() {
-			So(New(SLACK, SlackConfig{
-				URL: "https://slack.com",
+			So(New(DISCORD, DiscordConfig{
+				URL: "https://discordapp.com",
 			}), ShouldBeNil)
 
 			Convey("Incorrect level", func() {
@@ -46,13 +47,21 @@ func Test_slack_Init(t *testing.T) {
 	})
 }
 
-func Test_buildSlackPayload(t *testing.T) {
-	Convey("Build Slack payload", t, func() {
-		payload, err := buildSlackPayload(&Message{
+func Test_buildDiscordPayload(t *testing.T) {
+	Convey("Build Discord payload", t, func() {
+		payload, err := buildDiscordPayload("clog", &Message{
 			Level: INFO,
-			Body:  "test message",
+			Body:  "[ INFO] test message",
 		})
 		So(err, ShouldBeNil)
-		So(payload, ShouldEqual, `{"attachments":[{"text":"test message","color":"#3aa3e3"}]}`)
+
+		obj := &discordPayload{}
+		So(json.Unmarshal([]byte(payload), obj), ShouldBeNil)
+		So(obj.Username, ShouldEqual, "clog")
+		So(len(obj.Embeds), ShouldEqual, 1)
+		So(obj.Embeds[0].Title, ShouldEqual, "Information")
+		So(obj.Embeds[0].Description, ShouldEqual, "test message")
+		So(obj.Embeds[0].Timestamp, ShouldNotBeEmpty)
+		So(obj.Embeds[0].Color, ShouldEqual, 3843043)
 	})
 }
