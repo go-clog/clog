@@ -72,6 +72,18 @@ type Message struct {
 }
 
 func Write(level LEVEL, skip int, format string, v ...interface{}) {
+        thisChans := make([]chan<- *Message, 0)
+	for i := range receivers {
+		if receivers[i].Level() > level {
+			continue
+		}
+                thisChans = append(thisChans, receivers[i].msgChan)
+        }
+        if len(thisChans) == 0 {
+            //No receivers for this level
+            return
+        }
+
 	msg := &Message{
 		Level: level,
 	}
@@ -100,12 +112,8 @@ func Write(level LEVEL, skip int, format string, v ...interface{}) {
 		msg.Body = formats[level] + fmt.Sprintf(format, v...)
 	}
 
-	for i := range receivers {
-		if receivers[i].Level() > level {
-			continue
-		}
-
-		receivers[i].msgChan <- msg
+	for _, ch := range thisChans {
+		ch <- msg
 	}
 }
 
