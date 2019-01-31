@@ -28,7 +28,7 @@ Please apply `-u` flag to update in the future.
 
 ## Getting Started
 
-Clog currently has three builtin logger adapters: `console`, `file`, `slack` and `discord`.
+Clog currently has four builtin logger adapters: `console`, `file`, `slack` and `discord`.
 
 It is extremely easy to create one with all default settings. Generally, you would want to create new logger inside `init` or `main` function.
 
