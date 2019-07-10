@@ -106,6 +106,10 @@ When using `log.Error` and `log.Fatal` functions, the first argument allows you 
 
 Calling `log.Fatal` will exit the program.
 
+### Clean Shutdown
+
+If you set `BufferSize` greater than `0`, you should always call `log.Shutdown()` to wait until all messages are processed before program exit.
+
 ## File
 
 File logger is more complex than console, and it has ability to rotate:
