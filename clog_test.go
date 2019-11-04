@@ -32,16 +32,14 @@ type bufLogger struct {
 	*noopLogger
 }
 
-func (l *bufLogger) Write(m Messager) {
-	l.buf.WriteString(m.String())
+func (l *bufLogger) Write(m Messager) error {
+	_, err := l.buf.WriteString(m.String() + "\n")
+	return err
 }
 
 func Test_memoryLogger(t *testing.T) {
-	defer initLoggerManager()
-
 	mode1 := Mode("mode1")
 	level1 := LevelTrace
-	var buf1 bytes.Buffer
 	NewRegister(mode1, func(v interface{}) (Logger, error) {
 		cfg, ok := v.(bufConfig)
 		if !ok {
@@ -55,13 +53,9 @@ func Test_memoryLogger(t *testing.T) {
 			},
 		}, nil
 	})
-	assert.Nil(t, New(mode1, bufConfig{
-		buf: &buf1,
-	}))
 
 	mode2 := Mode("mode2")
 	level2 := LevelError
-	var buf2 bytes.Buffer
 	NewRegister(mode2, func(v interface{}) (Logger, error) {
 		cfg, ok := v.(bufConfig)
 		if !ok {
@@ -75,64 +69,62 @@ func Test_memoryLogger(t *testing.T) {
 			},
 		}, nil
 	})
-	assert.Nil(t, New(mode2, bufConfig{
-		buf: &buf2,
-	}))
 
-	assert.Equal(t, 2, loggerMgr.num())
+	tests := []struct {
+		name         string
+		fn           func(string, ...interface{})
+		containsStr1 string
+		containsStr2 string
+	}{
+		{
+			name:         "trace",
+			fn:           Trace,
+			containsStr1: "[TRACE] log message",
+			containsStr2: "",
+		},
+		{
+			name:         "info",
+			fn:           Info,
+			containsStr1: "[ INFO] log message",
+			containsStr2: "",
+		},
+		{
+			name:         "warn",
+			fn:           Warn,
+			containsStr1: "[ WARN] log message",
+			containsStr2: "",
+		},
+		{
+			name:         "error",
+			fn:           Error,
+			containsStr1: "()] log message",
+			containsStr2: "()] log message",
+		},
+		{
+			name:         "fatal",
+			fn:           Fatal,
+			containsStr1: "()] log message",
+			containsStr2: "()] log message",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer initManager()
+			var buf1, buf2 bytes.Buffer
+			assert.Nil(t, New(mode1, 2, bufConfig{
+				buf: &buf1,
+			}))
+			assert.Nil(t, New(mode2, 2, bufConfig{
+				buf: &buf2,
+			}))
+			assert.Equal(t, 2, mgr.len())
 
-	t.Run("trace", func(t *testing.T) {
-		defer func() {
-			buf1.Reset()
-			buf2.Reset()
-		}()
-		Trace("this is a trace log")
+			tt.fn("log message")
+			tt.fn("log message")
+			Stop()
 
-		assert.Equal(t, "[TRACE] this is a trace log", buf1.String())
-		assert.Empty(t, buf2.String())
-	})
-
-	t.Run("info", func(t *testing.T) {
-		defer func() {
-			buf1.Reset()
-			buf2.Reset()
-		}()
-		Info("this is a info log")
-
-		assert.Equal(t, "[ INFO] this is a info log", buf1.String())
-		assert.Empty(t, buf2.String())
-	})
-
-	t.Run("warn", func(t *testing.T) {
-		defer func() {
-			buf1.Reset()
-			buf2.Reset()
-		}()
-		Warn("this is a warn log")
-
-		assert.Equal(t, "[ WARN] this is a warn log", buf1.String())
-		assert.Empty(t, buf2.String())
-	})
-
-	t.Run("error", func(t *testing.T) {
-		defer func() {
-			buf1.Reset()
-			buf2.Reset()
-		}()
-		Error("this is an error log")
-
-		assert.Contains(t, buf1.String(), "()] this is an error log")
-		assert.Contains(t, buf2.String(), "()] this is an error log")
-	})
-
-	t.Run("fatal", func(t *testing.T) {
-		defer func() {
-			buf1.Reset()
-			buf2.Reset()
-		}()
-		Fatal("this is a fatal log")
-
-		assert.Contains(t, buf1.String(), "()] this is a fatal log")
-		assert.Contains(t, buf2.String(), "()] this is a fatal log")
-	})
+			assert.Contains(t, buf1.String(), tt.containsStr1)
+			assert.Contains(t, buf2.String(), tt.containsStr2)
+		})
+	}
 }

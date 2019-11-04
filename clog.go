@@ -40,17 +40,17 @@ func (l Level) String() string {
 
 // Trace writes formatted log in Trace level.
 func Trace(format string, v ...interface{}) {
-	loggerMgr.write(LevelTrace, 0, format, v...)
+	mgr.write(LevelTrace, 0, format, v...)
 }
 
 // Info writes formatted log in Info level.
 func Info(format string, v ...interface{}) {
-	loggerMgr.write(LevelInfo, 0, format, v...)
+	mgr.write(LevelInfo, 0, format, v...)
 }
 
 // Warn writes formatted log in Warn level.
 func Warn(format string, v ...interface{}) {
-	loggerMgr.write(LevelWarn, 0, format, v...)
+	mgr.write(LevelWarn, 0, format, v...)
 }
 
 // Error writes formatted log in Error level.
@@ -60,7 +60,7 @@ func Error(format string, v ...interface{}) {
 
 // ErrorDepth writes formatted log with given skip depth in Error level.
 func ErrorDepth(skip int, format string, v ...interface{}) {
-	loggerMgr.write(LevelError, skip, format, v...)
+	mgr.write(LevelError, skip, format, v...)
 }
 
 // Fatal writes formatted log in Fatal level then exits.
@@ -73,7 +73,7 @@ var inTest = false
 
 // FatalDepth writes formatted log with given skip depth in Fatal level then exits.
 func FatalDepth(skip int, format string, v ...interface{}) {
-	loggerMgr.write(LevelFatal, skip, format, v...)
+	mgr.write(LevelFatal, skip, format, v...)
 	Stop()
 
 	if inTest {
@@ -84,5 +84,5 @@ func FatalDepth(skip int, format string, v ...interface{}) {
 
 // Stop propagates cancellation to all loggers and waits for completion.
 func Stop() {
-	loggerMgr.stop()
+	mgr.stop()
 }

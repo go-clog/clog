@@ -2,7 +2,6 @@ package clog
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,8 +48,6 @@ var (
 type DiscordConfig struct {
 	// Minimum level of messages to be processed.
 	Level Level
-	// Buffer size defines how many messages can be queued before hangs.
-	BufferSize int64
 	// Discord webhook URL.
 	URL string
 	// Username to be shown for the message.
@@ -68,9 +65,6 @@ var _ Logger = (*discordLogger)(nil)
 
 type discordLogger struct {
 	level    Level
-	msgChan  chan Messager
-	doneChan chan struct{}
-
 	url      string
 	username string
 	titles   []string
@@ -83,27 +77,6 @@ func (_ *discordLogger) Mode() Mode {
 
 func (l *discordLogger) Level() Level {
 	return l.level
-}
-
-func (l *discordLogger) Start(ctx context.Context) {
-loop:
-	for {
-		select {
-		case m := <-l.msgChan:
-			l.write(m)
-		case <-ctx.Done():
-			break loop
-		}
-	}
-
-	for {
-		if len(l.msgChan) == 0 {
-			break
-		}
-
-		l.write(<-l.msgChan)
-	}
-	l.doneChan <- struct{}{} // Notify the cleanup is done.
 }
 
 func buildDiscordPayload(username string, titles []string, colors []int, m Messager) (string, error) {
@@ -154,11 +127,10 @@ func (l *discordLogger) postMessage(r io.Reader) (int64, error) {
 	return -1, nil
 }
 
-func (l *discordLogger) write(m Messager) {
+func (l *discordLogger) Write(m Messager) error {
 	payload, err := buildDiscordPayload(l.username, l.titles, l.colors, m)
 	if err != nil {
-		fmt.Printf("discordLogger: error building payload: %v\n", err)
-		return
+		return fmt.Errorf("build payload: %v", err)
 	}
 
 	const retryTimes = 3
@@ -166,8 +138,7 @@ func (l *discordLogger) write(m Messager) {
 	for i := 1; i <= retryTimes; i++ {
 		retryAfter, err := l.postMessage(bytes.NewReader([]byte(payload)))
 		if err != nil {
-			fmt.Printf("discordLogger: error posting message: %v\n", err)
-			return
+			return fmt.Errorf("post message: %v", err)
 		}
 
 		if retryAfter > 0 {
@@ -175,18 +146,10 @@ func (l *discordLogger) write(m Messager) {
 			continue
 		}
 
-		return
+		return nil
 	}
 
-	fmt.Printf("discordLogger: unable to post message after %d retries\n", retryTimes)
-}
-
-func (l *discordLogger) Write(m Messager) {
-	l.msgChan <- m
-}
-
-func (l *discordLogger) WaitForStop() {
-	<-l.doneChan
+	return fmt.Errorf("gave up after %d retries", retryTimes)
 }
 
 func init() {
@@ -218,8 +181,6 @@ func init() {
 
 		return &discordLogger{
 			level:    cfg.Level,
-			msgChan:  make(chan Messager, cfg.BufferSize),
-			doneChan: make(chan struct{}),
 			url:      cfg.URL,
 			username: cfg.Username,
 			titles:   titles,

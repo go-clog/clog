@@ -1,7 +1,6 @@
 package clog
 
 import (
-	"context"
 	"fmt"
 	"log"
 
@@ -21,19 +20,14 @@ var consoleColors = []func(a ...interface{}) string{
 
 // ConsoleConfig is the config object for the "console" mode logger.
 type ConsoleConfig struct {
-	// Minimum level of messages to be processed.
+	// Minimum logging level of messages to be processed.
 	Level Level
-	// Buffer size defines how many messages can be queued before hangs.
-	BufferSize int64
 }
 
 var _ Logger = (*consoleLogger)(nil)
 
 type consoleLogger struct {
-	level    Level
-	msgChan  chan Messager
-	doneChan chan struct{}
-
+	level Level
 	*log.Logger
 }
 
@@ -45,37 +39,9 @@ func (l *consoleLogger) Level() Level {
 	return l.level
 }
 
-func (l *consoleLogger) Start(ctx context.Context) {
-loop:
-	for {
-		select {
-		case m := <-l.msgChan:
-			l.write(m)
-		case <-ctx.Done():
-			break loop
-		}
-	}
-
-	for {
-		if len(l.msgChan) == 0 {
-			break
-		}
-
-		l.write(<-l.msgChan)
-	}
-	l.doneChan <- struct{}{} // Notify the cleanup is done.
-}
-
-func (l *consoleLogger) write(m Messager) {
+func (l *consoleLogger) Write(m Messager) error {
 	l.Print(consoleColors[m.Level()](m.String()))
-}
-
-func (l *consoleLogger) Write(m Messager) {
-	l.msgChan <- m
-}
-
-func (l *consoleLogger) WaitForStop() {
-	<-l.doneChan
+	return nil
 }
 
 func init() {
@@ -86,10 +52,8 @@ func init() {
 		}
 
 		return &consoleLogger{
-			level:    cfg.Level,
-			msgChan:  make(chan Messager, cfg.BufferSize),
-			doneChan: make(chan struct{}),
-			Logger:   log.New(color.Output, "", log.Ldate|log.Ltime),
+			level:  cfg.Level,
+			Logger: log.New(color.Output, "", log.Ldate|log.Ltime),
 		}, nil
 	})
 }

@@ -2,7 +2,6 @@ package clog
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -52,13 +51,12 @@ type fileLogger struct {
 	// Indicates whether object is been used in standalone mode.
 	standalone bool
 
-	level    Level
-	msgChan  chan Messager
-	doneChan chan struct{}
+	level Level
 
 	filename       string
 	rotationConfig FileRotationConfig
 
+	// Rotation metadata
 	file         *os.File
 	openDay      int
 	currentSize  int64
@@ -73,27 +71,6 @@ func (_ *fileLogger) Mode() Mode {
 
 func (l *fileLogger) Level() Level {
 	return l.level
-}
-
-func (l *fileLogger) Start(ctx context.Context) {
-loop:
-	for {
-		select {
-		case m := <-l.msgChan:
-			l.write(m)
-		case <-ctx.Done():
-			break loop
-		}
-	}
-
-	for {
-		if len(l.msgChan) == 0 {
-			break
-		}
-
-		l.write(<-l.msgChan)
-	}
-	l.doneChan <- struct{}{} // Notify the cleanup is done.
 }
 
 var newLineBytes = []byte("\n")
@@ -144,7 +121,7 @@ func (l *fileLogger) deleteOutdatedFiles() {
 	})
 }
 
-func (l *fileLogger) initRotate() error {
+func (l *fileLogger) initRotation() error {
 	// Gather basic file info for rotation.
 	fi, err := l.file.Stat()
 	if err != nil {
@@ -191,7 +168,7 @@ func (l *fileLogger) initRotate() error {
 	return nil
 }
 
-func (l *fileLogger) write(m Messager) int {
+func (l *fileLogger) write(m Messager) (int, error) {
 	l.Logger.Print(m.String())
 
 	bytesWrote := len(m.String())
@@ -221,13 +198,11 @@ func (l *fileLogger) write(m Messager) int {
 		if needsRotate {
 			_ = l.file.Close()
 			if err := os.Rename(l.filename, l.rotateFilename(rotateDate.Format(simpleDateFormat))); err != nil {
-				fmt.Printf("fileLogger: error renaming rotate file %q: %v\n", l.filename, err)
-				return bytesWrote
+				return bytesWrote, fmt.Errorf("rename rotated file %q: %v", l.filename, err)
 			}
 
 			if err := l.initFile(); err != nil {
-				fmt.Printf("fileLogger: error initializing log file %q: %v\n", l.filename, err)
-				return bytesWrote
+				return bytesWrote, fmt.Errorf("init file %q: %v", l.filename, err)
 			}
 
 			l.openDay = now.Day()
@@ -235,15 +210,12 @@ func (l *fileLogger) write(m Messager) int {
 			l.currentLines = 0
 		}
 	}
-	return bytesWrote
+	return bytesWrote, nil
 }
 
-func (l *fileLogger) Write(m Messager) {
-	l.msgChan <- m
-}
-
-func (l *fileLogger) WaitForStop() {
-	<-l.doneChan
+func (l *fileLogger) Write(m Messager) error {
+	_, err := l.write(m)
+	return err
 }
 
 func (l *fileLogger) init() error {
@@ -253,7 +225,7 @@ func (l *fileLogger) init() error {
 	}
 
 	if l.rotationConfig.Rotate {
-		if err := l.initRotate(); err != nil {
+		if err := l.initRotation(); err != nil {
 			return fmt.Errorf("init rotate: %v", err)
 		}
 	}
@@ -269,8 +241,6 @@ func init() {
 
 		l := &fileLogger{
 			level:          cfg.Level,
-			msgChan:        make(chan Messager, cfg.BufferSize),
-			doneChan:       make(chan struct{}),
 			filename:       cfg.Filename,
 			rotationConfig: cfg.FileRotationConfig,
 		}
@@ -307,5 +277,5 @@ func NewFileWriter(filename string, cfg FileRotationConfig) (io.Writer, error) {
 func (w *fileWriter) Write(p []byte) (int, error) {
 	return w.write(&message{
 		body: string(p),
-	}), nil
+	})
 }

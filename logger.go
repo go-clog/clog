@@ -3,21 +3,20 @@ package clog
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync/atomic"
+
+	"github.com/fatih/color"
 )
 
 // Logger is an interface for a logger with a specific mode and level.
 type Logger interface {
 	// Mode returns the mode of the logger.
 	Mode() Mode
-	// Level returns minimum level of the logger.
+	// Level returns the minimum logging level of the logger.
 	Level() Level
-	// Start starts the backgound process and a context for cancellation.
-	Start(context.Context)
-	// Write processes a Messager asynchronically.
-	Write(Messager)
-	// WaitForStop blocks until the logger is fully stopped.
-	WaitForStop()
+	// Write processes a Messager entry.
+	Write(Messager) error
 }
 
 // Register is a factory function taht returns a new Logger.
@@ -40,25 +39,38 @@ func NewRegister(mode Mode, r Register) {
 }
 
 type cancelableLogger struct {
-	cancel context.CancelFunc
+	cancel  context.CancelFunc
+	msgChan chan Messager
+	done    chan struct{}
 	Logger
 }
 
-type loggerManager struct {
+var errLogger = log.New(color.Output, "", log.Ldate|log.Ltime)
+var errSprintf = color.New(color.FgRed).Sprintf
+
+func (l *cancelableLogger) error(err error) {
+	if err == nil {
+		return
+	}
+
+	errLogger.Print(errSprintf("clog [%s]: %v\n", l.Mode(), err))
+}
+
+type manager struct {
 	state   int64 // 0=stopping, 1=running
 	ctx     context.Context
 	cancel  context.CancelFunc
 	loggers []*cancelableLogger
 }
 
-func (mgr *loggerManager) num() int {
-	return len(mgr.loggers)
+func (m *manager) len() int {
+	return len(m.loggers)
 }
 
-func (mgr *loggerManager) write(level Level, skip int, format string, v ...interface{}) {
+func (m *manager) write(level Level, skip int, format string, v ...interface{}) {
 	var msg *message
-	for i := range loggerMgr.loggers {
-		if loggerMgr.loggers[i].Level() > level {
+	for i := range mgr.loggers {
+		if mgr.loggers[i].Level() > level {
 			continue
 		}
 
@@ -66,27 +78,27 @@ func (mgr *loggerManager) write(level Level, skip int, format string, v ...inter
 			msg = newMessage(level, skip, format, v...)
 		}
 
-		loggerMgr.loggers[i].Write(msg)
+		mgr.loggers[i].msgChan <- msg
 	}
 }
 
-func (mgr *loggerManager) stop() {
+func (m *manager) stop() {
 	// Make sure cancellation is only propagated once to prevent deadlock of WaitForStop.
-	if !atomic.CompareAndSwapInt64(&mgr.state, 1, 0) {
+	if !atomic.CompareAndSwapInt64(&m.state, 1, 0) {
 		return
 	}
 
-	mgr.cancel()
-	for _, l := range mgr.loggers {
-		l.WaitForStop()
+	m.cancel()
+	for _, l := range m.loggers {
+		<-l.done
 	}
 }
 
-var loggerMgr *loggerManager
+var mgr *manager
 
-func initLoggerManager() {
+func initManager() {
 	ctx, cancel := context.WithCancel(context.Background())
-	loggerMgr = &loggerManager{
+	mgr = &manager{
 		state:  1,
 		ctx:    ctx,
 		cancel: cancel,
@@ -94,49 +106,73 @@ func initLoggerManager() {
 }
 
 func init() {
-	initLoggerManager()
+	initManager()
 }
 
 // New initializes and appends a new Logger to the managed list.
 // Calling this function multiple times will overwrite previous Logger with same mode.
 //
 // This function is not concurrent safe.
-func New(mode Mode, cfg interface{}) error {
+func New(mode Mode, bufferSize int64, cfg interface{}) error {
 	r, ok := registers[mode]
 	if !ok {
 		return fmt.Errorf("no register for %q", mode)
 	}
 
-	logger, err := r(cfg)
+	l, err := r(cfg)
 	if err != nil {
 		return fmt.Errorf("initialize logger: %v", err)
 	}
 
-	ctx, cancel := context.WithCancel(loggerMgr.ctx)
+	ctx, cancel := context.WithCancel(mgr.ctx)
 	cl := &cancelableLogger{
-		cancel: cancel,
-		Logger: logger,
+		cancel:  cancel,
+		msgChan: make(chan Messager, bufferSize),
+		done:    make(chan struct{}),
+		Logger:  l,
 	}
 
 	// Check and replace previous logger.
 	found := false
-	for i, l := range loggerMgr.loggers {
+	for i, l := range mgr.loggers {
 		if l.Mode() == mode {
 			found = true
 
 			// Release previous logger.
 			l.cancel()
-			l.WaitForStop()
+			<-l.done
 
-			loggerMgr.loggers[i] = cl
+			mgr.loggers[i] = cl
 			break
 		}
 	}
 	if !found {
-		loggerMgr.loggers = append(loggerMgr.loggers, cl)
+		mgr.loggers = append(mgr.loggers, cl)
 	}
 
-	go logger.Start(ctx)
+	go func() {
+	loop:
+		for {
+			select {
+			case m := <-cl.msgChan:
+				cl.error(cl.Write(m))
+			case <-ctx.Done():
+				break loop
+			}
+		}
+
+		// Drain the msgChan at best effort.
+		for {
+			if len(cl.msgChan) == 0 {
+				break
+			}
+
+			cl.error(cl.Write(<-cl.msgChan))
+		}
+
+		// Notify the cleanup is done.
+		cl.done <- struct{}{}
+	}()
 	return nil
 }
 
@@ -144,24 +180,16 @@ func New(mode Mode, cfg interface{}) error {
 //
 // This function is not concurrent safe.
 func Remove(mode Mode) {
-	idx := -1
-	for i, l := range loggerMgr.loggers {
+	loggers := mgr.loggers[:0]
+	for _, l := range mgr.loggers {
 		if l.Mode() == mode {
-			idx = i
-			l.cancel()
-			l.WaitForStop()
-		}
-	}
-	if idx == -1 {
-		return
-	}
-
-	loggers := loggerMgr.loggers[:0]
-	for i, l := range loggerMgr.loggers {
-		if i == idx {
+			go func(l *cancelableLogger) {
+				l.cancel()
+				<-l.done
+			}(l)
 			continue
 		}
 		loggers = append(loggers, l)
 	}
-	loggerMgr.loggers = loggers
+	mgr.loggers = loggers
 }

@@ -1,7 +1,6 @@
 package clog
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -66,11 +65,9 @@ type noopLogger struct {
 	level Level
 }
 
-func (l *noopLogger) Mode() Mode              { return l.mode }
-func (l *noopLogger) Level() Level            { return l.level }
-func (l *noopLogger) Start(_ context.Context) {}
-func (l *noopLogger) Write(_ Messager)        {}
-func (l *noopLogger) WaitForStop()            {}
+func (l *noopLogger) Mode() Mode             { return l.mode }
+func (l *noopLogger) Level() Level           { return l.level }
+func (l *noopLogger) Write(_ Messager) error { return nil }
 
 func TestNew(t *testing.T) {
 	testModeGood := Mode("TestNew_good")
@@ -121,7 +118,7 @@ func TestNew(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := New(tt.mode, nil)
+			err := New(tt.mode, 10, nil)
 			assert.Equal(t, tt.want, err)
 		})
 	}
@@ -134,7 +131,7 @@ func TestRemove(t *testing.T) {
 			mode: testMode1,
 		}, nil
 	})
-	assert.Nil(t, New(testMode1, nil))
+	assert.Nil(t, New(testMode1, 10, nil))
 
 	testMode2 := Mode("TestRemove2")
 	NewRegister(testMode2, func(_ interface{}) (Logger, error) {
@@ -142,7 +139,7 @@ func TestRemove(t *testing.T) {
 			mode: testMode2,
 		}, nil
 	})
-	assert.Nil(t, New(testMode2, nil))
+	assert.Nil(t, New(testMode2, 10, nil))
 
 	tests := []struct {
 		name       string
@@ -168,7 +165,7 @@ func TestRemove(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			Remove(tt.mode)
-			assert.Equal(t, tt.numLoggers, loggerMgr.num())
+			assert.Equal(t, tt.numLoggers, mgr.len())
 		})
 	}
 }

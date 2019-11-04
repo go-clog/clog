@@ -49,13 +49,13 @@ func Test_ModeSlack(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.wantErr, New(ModeSlack, tt.config))
+			assert.Equal(t, tt.wantErr, New(ModeSlack, 10, tt.config))
 		})
 	}
 
-	assert.Equal(t, 1, loggerMgr.num())
-	assert.Equal(t, ModeSlack, loggerMgr.loggers[0].Mode())
-	assert.Equal(t, LevelInfo, loggerMgr.loggers[0].Level())
+	assert.Equal(t, 1, mgr.len())
+	assert.Equal(t, ModeSlack, mgr.loggers[0].Mode())
+	assert.Equal(t, LevelInfo, mgr.loggers[0].Level())
 }
 
 func Test_buildSlackPayload(t *testing.T) {

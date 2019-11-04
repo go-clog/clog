@@ -21,8 +21,7 @@ func Test_ModeConsole(t *testing.T) {
 		{
 			name: "valid config",
 			config: ConsoleConfig{
-				Level:      LevelInfo,
-				BufferSize: 10,
+				Level: LevelInfo,
 			},
 			wantErr: nil,
 		},
@@ -34,11 +33,11 @@ func Test_ModeConsole(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.wantErr, New(ModeConsole, tt.config))
+			assert.Equal(t, tt.wantErr, New(ModeConsole, 10, tt.config))
 		})
 	}
 
-	assert.Equal(t, 1, loggerMgr.num())
-	assert.Equal(t, ModeConsole, loggerMgr.loggers[0].Mode())
-	assert.Equal(t, LevelInfo, loggerMgr.loggers[0].Level())
+	assert.Equal(t, 1, mgr.len())
+	assert.Equal(t, ModeConsole, mgr.loggers[0].Mode())
+	assert.Equal(t, LevelInfo, mgr.loggers[0].Level())
 }

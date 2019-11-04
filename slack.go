@@ -2,10 +2,10 @@ package clog
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 )
@@ -44,10 +44,7 @@ type SlackConfig struct {
 var _ Logger = (*slackLogger)(nil)
 
 type slackLogger struct {
-	level    Level
-	msgChan  chan Messager
-	doneChan chan struct{}
-
+	level  Level
 	url    string
 	colors []string
 }
@@ -58,27 +55,6 @@ func (_ *slackLogger) Mode() Mode {
 
 func (l *slackLogger) Level() Level {
 	return l.level
-}
-
-func (l *slackLogger) Start(ctx context.Context) {
-loop:
-	for {
-		select {
-		case m := <-l.msgChan:
-			l.postMessage(m)
-		case <-ctx.Done():
-			break loop
-		}
-	}
-
-	for {
-		if len(l.msgChan) == 0 {
-			break
-		}
-
-		l.postMessage(<-l.msgChan)
-	}
-	l.doneChan <- struct{}{} // Notify the cleanup is done.
 }
 
 func buildSlackPayload(colors []string, m Messager) (string, error) {
@@ -97,36 +73,34 @@ func buildSlackPayload(colors []string, m Messager) (string, error) {
 	return string(p), nil
 }
 
-func (l *slackLogger) postMessage(m Messager) {
-	payload, err := buildSlackPayload(l.colors, m)
+func (l *slackLogger) postMessage(r io.Reader) error {
+	resp, err := http.Post(l.url, "application/json", r)
 	if err != nil {
-		fmt.Printf("slackLogger: error building payload: %v\n", err)
-		return
-	}
-
-	resp, err := http.Post(l.url, "application/json", bytes.NewReader([]byte(payload)))
-	if err != nil {
-		fmt.Printf("slackLogger: error making HTTP request: %v\n", err)
-		return
+		return fmt.Errorf("HTTP request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode/100 != 2 {
 		data, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			fmt.Printf("slackLogger: error reading HTTP response body: %v\n", err)
-			return
+			return fmt.Errorf("read HTTP response body: %v", err)
 		}
-		fmt.Printf("slackLogger: non-success response status code %d with body: %s\n", resp.StatusCode, data)
+		return fmt.Errorf("non-success response status code %d with body: %s", resp.StatusCode, data)
 	}
+	return nil
 }
 
-func (l *slackLogger) Write(m Messager) {
-	l.msgChan <- m
-}
+func (l *slackLogger) Write(m Messager) error {
+	payload, err := buildSlackPayload(l.colors, m)
+	if err != nil {
+		return fmt.Errorf("build payload: %v", err)
+	}
 
-func (l *slackLogger) WaitForStop() {
-	<-l.doneChan
+	err = l.postMessage(bytes.NewReader([]byte(payload)))
+	if err != nil {
+		return fmt.Errorf("post message: %v", err)
+	}
+	return nil
 }
 
 func init() {
@@ -149,11 +123,9 @@ func init() {
 		}
 
 		return &slackLogger{
-			level:    cfg.Level,
-			msgChan:  make(chan Messager, cfg.BufferSize),
-			doneChan: make(chan struct{}),
-			url:      cfg.URL,
-			colors:   colors,
+			level:  cfg.Level,
+			url:    cfg.URL,
+			colors: colors,
 		}, nil
 	})
 }
