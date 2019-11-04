@@ -10,7 +10,6 @@ import (
 type Mode string
 
 //const (
-//	ModeConsole Mode = "console"
 //	ModeFile    Mode = "file"
 //	ModeSlack   Mode = "slack"
 //	ModeDiscord Mode = "discord"
@@ -45,50 +44,43 @@ func (l Level) String() string {
 	}
 }
 
-func write(level Level, skip int, format string, v ...interface{}) {
-	var msg *message
-	for i := range loggerMgr.loggers {
-		if loggerMgr.loggers[i].Level() > level {
-			continue
-		}
-
-		if msg == nil {
-			msg = newMessage(level, skip, format, v...)
-		}
-
-		loggerMgr.loggers[i].Write(msg)
-	}
-}
-
+// Trace writes formatted log in Trace level.
 func Trace(format string, v ...interface{}) {
-	write(LevelTrace, 0, format, v...)
+	loggerMgr.write(LevelTrace, 0, format, v...)
 }
 
+// Info writes formatted log in Info level.
 func Info(format string, v ...interface{}) {
-	write(LevelInfo, 0, format, v...)
+	loggerMgr.write(LevelInfo, 0, format, v...)
 }
 
+// Warn writes formatted log in Warn level.
 func Warn(format string, v ...interface{}) {
-	write(LevelWarn, 0, format, v...)
+	loggerMgr.write(LevelWarn, 0, format, v...)
 }
 
+// Error writes formatted log in Error level.
 func Error(format string, v ...interface{}) {
 	ErrorDepth(4, format, v...)
 }
 
+// ErrorDepth writes formatted log with given skip depth in Error level.
 func ErrorDepth(skip int, format string, v ...interface{}) {
-	write(LevelError, skip, format, v...)
+	loggerMgr.write(LevelError, skip, format, v...)
 }
 
+// Fatal writes formatted log in Fatal level then exits.
 func Fatal(format string, v ...interface{}) {
 	FatalDepth(4, format, v...)
 }
 
+// In test environment, calling Fatal or FatalDepth won't actually exit the program.
 var inTest = false
 
+// FatalDepth writes formatted log with given skip depth in Fatal level then exits.
 func FatalDepth(skip int, format string, v ...interface{}) {
-	write(LevelFatal, skip, format, v...)
-	Shutdown()
+	loggerMgr.write(LevelFatal, skip, format, v...)
+	Stop()
 
 	if inTest {
 		return
@@ -96,6 +88,7 @@ func FatalDepth(skip int, format string, v ...interface{}) {
 	os.Exit(1)
 }
 
-func Shutdown() {
+// Stop propagates cancellation to all loggers and waits for completion.
+func Stop() {
 	loggerMgr.stop()
 }

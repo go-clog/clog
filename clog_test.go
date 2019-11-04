@@ -3,8 +3,9 @@ package clog
 import (
 	"bytes"
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func init() {
@@ -44,7 +45,7 @@ func Test_memoryLogger(t *testing.T) {
 	NewRegister(mode1, func(v interface{}) (Logger, error) {
 		cfg, ok := v.(bufConfig)
 		if !ok {
-			return nil, fmt.Errorf("invalid config object: want %T got %T", &bufConfig{}, v)
+			return nil, fmt.Errorf("invalid config object: want %T got %T", bufConfig{}, v)
 		}
 		return &bufLogger{
 			buf: cfg.buf,
@@ -133,5 +134,16 @@ func Test_memoryLogger(t *testing.T) {
 
 		assert.Contains(t, buf1.String(), "()] this is a fatal log")
 		assert.Contains(t, buf2.String(), "()] this is a fatal log")
+	})
+
+	t.Run("discard", func(t *testing.T) {
+		defer func() {
+			buf1.Reset()
+			buf2.Reset()
+		}()
+		Stop()
+		Trace("this is a trace log")
+
+		assert.Empty(t, buf1.String())
 	})
 }

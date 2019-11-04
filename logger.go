@@ -3,6 +3,7 @@ package clog
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 )
 
 // Logger is an interface for a logger with a specific mode and level.
@@ -44,6 +45,7 @@ type cancelableLogger struct {
 }
 
 type loggerManager struct {
+	state   int64 // 0=stopping, 1=running
 	ctx     context.Context
 	cancel  context.CancelFunc
 	loggers []*cancelableLogger
@@ -54,9 +56,29 @@ func (mgr *loggerManager) num() int {
 }
 
 func (mgr *loggerManager) stop() {
+	// Make sure cancellation is only propagated once to prevent deadlock of WaitForStop.
+	if !atomic.CompareAndSwapInt64(&mgr.state, 1, 0) {
+		return
+	}
+
 	mgr.cancel()
 	for _, l := range mgr.loggers {
 		l.WaitForStop()
+	}
+}
+
+func (mgr *loggerManager) write(level Level, skip int, format string, v ...interface{}) {
+	var msg *message
+	for i := range loggerMgr.loggers {
+		if loggerMgr.loggers[i].Level() > level {
+			continue
+		}
+
+		if msg == nil {
+			msg = newMessage(level, skip, format, v...)
+		}
+
+		loggerMgr.loggers[i].Write(msg)
 	}
 }
 
@@ -65,6 +87,7 @@ var loggerMgr *loggerManager
 func initLoggerManager() {
 	ctx, cancel := context.WithCancel(context.Background())
 	loggerMgr = &loggerManager{
+		state:  1,
 		ctx:    ctx,
 		cancel: cancel,
 	}
