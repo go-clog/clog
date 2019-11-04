@@ -93,8 +93,8 @@ func isExist(path string) bool {
 }
 
 // rotateFilename returns next available rotate filename with given date.
-func (l *fileLogger) rotateFilename(date string) string {
-	filename := fmt.Sprintf("%s.%s", l.filename, date)
+func rotateFilename(filename, date string) string {
+	filename = fmt.Sprintf("%s.%s", filename, date)
 	if !isExist(filename) {
 		return filename
 	}
@@ -107,7 +107,7 @@ func (l *fileLogger) rotateFilename(date string) string {
 		}
 	}
 
-	panic("too many log files for yesterday")
+	panic("too many log files for yesterday, already reached 999")
 }
 
 func (l *fileLogger) deleteOutdatedFiles() {
@@ -152,7 +152,7 @@ func (l *fileLogger) initRotation() error {
 			if err = l.file.Close(); err != nil {
 				return fmt.Errorf("Close: %v", err)
 			}
-			if err = os.Rename(l.filename, l.rotateFilename(lastWriteTime.Format(simpleDateFormat))); err != nil {
+			if err = os.Rename(l.filename, rotateFilename(l.filename, lastWriteTime.Format(simpleDateFormat))); err != nil {
 				return fmt.Errorf("Rename: %v", err)
 			}
 
@@ -197,7 +197,7 @@ func (l *fileLogger) write(m Messager) (int, error) {
 
 		if needsRotate {
 			_ = l.file.Close()
-			if err := os.Rename(l.filename, l.rotateFilename(rotateDate.Format(simpleDateFormat))); err != nil {
+			if err := os.Rename(l.filename, rotateFilename(l.filename, rotateDate.Format(simpleDateFormat))); err != nil {
 				return bytesWrote, fmt.Errorf("rename rotated file %q: %v", l.filename, err)
 			}
 
