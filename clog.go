@@ -11,7 +11,6 @@ type Mode string
 
 //const (
 //	ModeFile    Mode = "file"
-//	ModeSlack   Mode = "slack"
 //	ModeDiscord Mode = "discord"
 //)
 

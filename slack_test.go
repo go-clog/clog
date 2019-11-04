@@ -1,58 +1,174 @@
-// Copyright 2017 Unknwon
-//
-// Licensed under the Apache License, Version 2.0 (the "License"): you may
-// not use this file except in compliance with the License. You may obtain
-// a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-// License for the specific language governing permissions and limitations
-// under the License.
-
 package clog
 
 import (
+	"errors"
 	"testing"
 
-	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/assert"
 )
 
-func Test_slack_Init(t *testing.T) {
-	Convey("Init Slack logger", t, func() {
-		Convey("Mismatched config object", func() {
-			err := New(SLACK, struct{}{})
-			So(err, ShouldNotBeNil)
-			_, ok := err.(ErrConfigObject)
-			So(ok, ShouldBeTrue)
-		})
+func Test_ModeSlack(t *testing.T) {
+	defer func() {
+		Remove(ModeSlack)
+	}()
 
-		Convey("Valid config object", func() {
-			So(New(SLACK, SlackConfig{
-				URL: "https://slack.com",
-			}), ShouldBeNil)
-
-			Convey("Incorrect level", func() {
-				err := New(SLACK, SlackConfig{
-					Level: LEVEL(-1),
-				})
-				So(err, ShouldNotBeNil)
-				_, ok := err.(ErrInvalidLevel)
-				So(ok, ShouldBeTrue)
-			})
+	tests := []struct {
+		name      string
+		config    interface{}
+		wantLevel Level
+		wantErr   error
+	}{
+		{
+			name: "valid config",
+			config: SlackConfig{
+				Level:      LevelInfo,
+				BufferSize: 10,
+				URL:        "https://slack.com",
+				Colors:     slackColors,
+			},
+			wantErr: nil,
+		},
+		{
+			name:    "invalid config",
+			config:  "random things",
+			wantErr: errors.New("initialize logger: invalid config object: want clog.SlackConfig got string"),
+		},
+		{
+			name:    "invalid URL",
+			config:  SlackConfig{},
+			wantErr: errors.New("initialize logger: empty URL"),
+		},
+		{
+			name: "incorrect number of colors",
+			config: SlackConfig{
+				URL:    "https://slack.com",
+				Colors: []string{},
+			},
+			wantErr: errors.New("initialize logger: colors must have exact 5 elements, but got 0"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.wantErr, New(ModeSlack, tt.config))
 		})
-	})
+	}
+
+	assert.Equal(t, 1, loggerMgr.num())
+	assert.Equal(t, LevelInfo, loggerMgr.loggers[0].Level())
 }
 
 func Test_buildSlackPayload(t *testing.T) {
-	Convey("Build Slack payload", t, func() {
-		payload, err := buildSlackPayload(&Message{
-			Level: INFO,
-			Body:  "test message",
-		})
-		So(err, ShouldBeNil)
-		So(payload, ShouldEqual, `{"attachments":[{"text":"test message","color":"#3aa3e3"}]}`)
+	t.Run("default colors", func(t *testing.T) {
+		tests := []struct {
+			name string
+			msg  *message
+			want string
+		}{
+			{
+				name: "trace",
+				msg: &message{
+					level: LevelTrace,
+					body:  "test message",
+				},
+				want: `{"attachments":[{"text":"test message","color":""}]}`,
+			},
+			{
+				name: "info",
+				msg: &message{
+					level: LevelInfo,
+					body:  "test message",
+				},
+				want: `{"attachments":[{"text":"test message","color":"#3aa3e3"}]}`,
+			},
+			{
+				name: "warn",
+				msg: &message{
+					level: LevelWarn,
+					body:  "test message",
+				},
+				want: `{"attachments":[{"text":"test message","color":"warning"}]}`,
+			},
+			{
+				name: "error",
+				msg: &message{
+					level: LevelError,
+					body:  "test message",
+				},
+				want: `{"attachments":[{"text":"test message","color":"danger"}]}`,
+			},
+			{
+				name: "fatal",
+				msg: &message{
+					level: LevelFatal,
+					body:  "test message",
+				},
+				want: `{"attachments":[{"text":"test message","color":"#ff0200"}]}`,
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				payload, err := buildSlackPayload(slackColors, tt.msg)
+				assert.Nil(t, err)
+				assert.Equal(t, tt.want, payload)
+			})
+		}
+	})
+
+	t.Run("custom colors", func(t *testing.T) {
+		colors := []string{"#1", "#2", "#3", "#4", "#5"}
+
+		tests := []struct {
+			name string
+			msg  *message
+			want string
+		}{
+			{
+				name: "trace",
+				msg: &message{
+					level: LevelTrace,
+					body:  "test message",
+				},
+				want: `{"attachments":[{"text":"test message","color":"#1"}]}`,
+			},
+			{
+				name: "info",
+				msg: &message{
+					level: LevelInfo,
+					body:  "test message",
+				},
+				want: `{"attachments":[{"text":"test message","color":"#2"}]}`,
+			},
+			{
+				name: "warn",
+				msg: &message{
+					level: LevelWarn,
+					body:  "test message",
+				},
+				want: `{"attachments":[{"text":"test message","color":"#3"}]}`,
+			},
+			{
+				name: "error",
+				msg: &message{
+					level: LevelError,
+					body:  "test message",
+				},
+				want: `{"attachments":[{"text":"test message","color":"#4"}]}`,
+			},
+			{
+				name: "fatal",
+				msg: &message{
+					level: LevelFatal,
+					body:  "test message",
+				},
+				want: `{"attachments":[{"text":"test message","color":"#5"}]}`,
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				payload, err := buildSlackPayload(colors, tt.msg)
+				assert.Nil(t, err)
+				assert.Equal(t, tt.want, payload)
+			})
+		}
 	})
 }

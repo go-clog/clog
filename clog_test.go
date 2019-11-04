@@ -135,15 +135,4 @@ func Test_memoryLogger(t *testing.T) {
 		assert.Contains(t, buf1.String(), "()] this is a fatal log")
 		assert.Contains(t, buf2.String(), "()] this is a fatal log")
 	})
-
-	t.Run("discard", func(t *testing.T) {
-		defer func() {
-			buf1.Reset()
-			buf2.Reset()
-		}()
-		Stop()
-		Trace("this is a trace log")
-
-		assert.Empty(t, buf1.String())
-	})
 }

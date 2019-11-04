@@ -55,18 +55,6 @@ func (mgr *loggerManager) num() int {
 	return len(mgr.loggers)
 }
 
-func (mgr *loggerManager) stop() {
-	// Make sure cancellation is only propagated once to prevent deadlock of WaitForStop.
-	if !atomic.CompareAndSwapInt64(&mgr.state, 1, 0) {
-		return
-	}
-
-	mgr.cancel()
-	for _, l := range mgr.loggers {
-		l.WaitForStop()
-	}
-}
-
 func (mgr *loggerManager) write(level Level, skip int, format string, v ...interface{}) {
 	var msg *message
 	for i := range loggerMgr.loggers {
@@ -79,6 +67,18 @@ func (mgr *loggerManager) write(level Level, skip int, format string, v ...inter
 		}
 
 		loggerMgr.loggers[i].Write(msg)
+	}
+}
+
+func (mgr *loggerManager) stop() {
+	// Make sure cancellation is only propagated once to prevent deadlock of WaitForStop.
+	if !atomic.CompareAndSwapInt64(&mgr.state, 1, 0) {
+		return
+	}
+
+	mgr.cancel()
+	for _, l := range mgr.loggers {
+		l.WaitForStop()
 	}
 }
 
