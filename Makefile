@@ -1,14 +1,17 @@
-.PHONY: build test vet
+.PHONY: build test vet coverage
 
 build: vet
 	go install -v
 
 test:
-	mkdir -p test
-	go test -v -cover -race -coverprofile=test/coverage.out
+	go test -v -cover -race -coverprofile=coverage.out
 
 vet:
 	go vet
 
 coverage:
-	go tool cover -html=test/coverage.out
+	go tool cover -html=coverage.out
+
+clean:
+	go clean
+	rm -f coverage.out

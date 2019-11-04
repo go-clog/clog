@@ -1,173 +1,137 @@
-// Copyright 2017 Unknwon
-//
-// Licensed under the Apache License, Version 2.0 (the "License"): you may
-// not use this file except in compliance with the License. You may obtain
-// a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-// License for the specific language governing permissions and limitations
-// under the License.
-
 package clog
 
 import (
 	"bytes"
-	"sync"
+	"fmt"
+	"github.com/stretchr/testify/assert"
 	"testing"
-
-	. "github.com/smartystreets/goconvey/convey"
 )
-
-func Test_Version(t *testing.T) {
-	Convey("Get version", t, func() {
-		So(Version(), ShouldEqual, _VERSION)
-	})
-}
-
-func Test_isValidLevel(t *testing.T) {
-	Convey("Validate log level", t, func() {
-		So(isValidLevel(LEVEL(-1)), ShouldBeFalse)
-		So(isValidLevel(LEVEL(5)), ShouldBeFalse)
-		So(isValidLevel(TRACE), ShouldBeTrue)
-		So(isValidLevel(FATAL), ShouldBeTrue)
-	})
-}
-
-const _MEMORY MODE = "memory"
-
-type memoryConfig struct {
-	// Minimum level of messages to be processed.
-	Level LEVEL
-	// Buffer size defines how many messages can be queued before hangs.
-	BufferSize int64
-}
-
-var (
-	buf bytes.Buffer
-	wg  sync.WaitGroup
-)
-
-type memory struct {
-	Adapter
-}
-
-func newMemory() Logger {
-	return &memory{
-		Adapter: Adapter{
-			quitChan: make(chan struct{}),
-		},
-	}
-}
-
-func (m *memory) Level() LEVEL { return m.level }
-
-func (m *memory) Init(v interface{}) error {
-	cfg, ok := v.(memoryConfig)
-	if !ok {
-		return ErrConfigObject{"memoryConfig", v}
-	}
-
-	if !isValidLevel(cfg.Level) {
-		return ErrInvalidLevel{}
-	}
-	m.level = cfg.Level
-
-	m.msgChan = make(chan *Message, cfg.BufferSize)
-	return nil
-}
-
-func (m *memory) ExchangeChans(errorChan chan<- error) chan *Message {
-	m.errorChan = errorChan
-	return m.msgChan
-}
-
-func (m *memory) write(msg *Message) {
-	buf.WriteString(msg.Body)
-	wg.Done()
-}
-
-func (m *memory) Start() {
-LOOP:
-	for {
-		select {
-		case msg := <-m.msgChan:
-			m.write(msg)
-		case <-m.quitChan:
-			break LOOP
-		}
-	}
-
-	for {
-		if len(m.msgChan) == 0 {
-			break
-		}
-
-		m.write(<-m.msgChan)
-	}
-	m.quitChan <- struct{}{} // Notify the cleanup is done.
-}
-
-func (m *memory) Destroy() {
-	m.quitChan <- struct{}{}
-	<-m.quitChan
-
-	close(m.msgChan)
-	close(m.quitChan)
-}
 
 func init() {
-	Register(_MEMORY, newMemory)
+	inTest = true
 }
 
-func Test_Clog(t *testing.T) {
-	Convey("In-memory logging", t, func() {
-		So(New(_MEMORY, memoryConfig{}), ShouldBeNil)
+func TestLevel_String(t *testing.T) {
+	invalidLevel := Level(-1)
+	defer func() {
+		assert.NotNil(t, recover())
+	}()
 
-		Convey("Basic logging", func() {
-			buf.Reset()
-			wg.Add(1)
-			Trace("Level: %v", TRACE)
-			wg.Wait()
-			So(buf.String(), ShouldEqual, "[TRACE] Level: 0")
+	_ = invalidLevel.String()
+}
 
-			buf.Reset()
-			wg.Add(1)
-			Info("Level: %v", INFO)
-			wg.Wait()
-			So(buf.String(), ShouldEqual, "[ INFO] Level: 1")
+type bufConfig struct {
+	buf *bytes.Buffer
+}
 
-			buf.Reset()
-			wg.Add(1)
-			Warn("Level: %v", WARN)
-			wg.Wait()
-			So(buf.String(), ShouldEqual, "[ WARN] Level: 2")
+var _ Logger = (*bufLogger)(nil)
 
-			buf.Reset()
-			wg.Add(1)
-			Error(0, "Level: %v", ERROR)
-			wg.Wait()
-			So(buf.String(), ShouldEqual, "[ERROR] Level: 3")
+type bufLogger struct {
+	buf *bytes.Buffer
+	*noopLogger
+}
 
-			buf.Reset()
-			wg.Add(1)
-			Error(2, "Level: %v", ERROR)
-			wg.Wait()
-			So(buf.String(), ShouldContainSubstring, "clog_test.go")
-		})
+func (l *bufLogger) Write(m Messager) {
+	l.buf.WriteString(m.String())
+}
+
+func Test_memoryLogger(t *testing.T) {
+	defer initLoggerManager()
+
+	mode1 := Mode("mode1")
+	level1 := LevelTrace
+	var buf1 bytes.Buffer
+	NewRegister(mode1, func(v interface{}) (Logger, error) {
+		cfg, ok := v.(bufConfig)
+		if !ok {
+			return nil, fmt.Errorf("invalid config object: want %T got %T", &bufConfig{}, v)
+		}
+		return &bufLogger{
+			buf: cfg.buf,
+			noopLogger: &noopLogger{
+				mode:  mode1,
+				level: level1,
+			},
+		}, nil
+	})
+	assert.Nil(t, New(mode1, bufConfig{
+		buf: &buf1,
+	}))
+
+	mode2 := Mode("mode2")
+	level2 := LevelError
+	var buf2 bytes.Buffer
+	NewRegister(mode2, func(v interface{}) (Logger, error) {
+		cfg, ok := v.(bufConfig)
+		if !ok {
+			return nil, fmt.Errorf("invalid config object: want %T got %T", &bufConfig{}, v)
+		}
+		return &bufLogger{
+			buf: cfg.buf,
+			noopLogger: &noopLogger{
+				mode:  mode2,
+				level: level2,
+			},
+		}, nil
+	})
+	assert.Nil(t, New(mode2, bufConfig{
+		buf: &buf2,
+	}))
+
+	assert.Equal(t, 2, loggerMgr.num())
+
+	t.Run("trace", func(t *testing.T) {
+		defer func() {
+			buf1.Reset()
+			buf2.Reset()
+		}()
+		Trace("this is a trace log")
+
+		assert.Equal(t, "[TRACE] this is a trace log", buf1.String())
+		assert.Empty(t, buf2.String())
 	})
 
-	Convey("Skip logs has lower level", t, func() {
-		So(New(_MEMORY, memoryConfig{
-			Level: ERROR,
-		}), ShouldBeNil)
+	t.Run("info", func(t *testing.T) {
+		defer func() {
+			buf1.Reset()
+			buf2.Reset()
+		}()
+		Info("this is a info log")
 
-		buf.Reset()
-		Trace("Level: %v", TRACE)
-		Trace("Level: %v", INFO)
-		So(buf.String(), ShouldEqual, "")
+		assert.Equal(t, "[ INFO] this is a info log", buf1.String())
+		assert.Empty(t, buf2.String())
+	})
+
+	t.Run("warn", func(t *testing.T) {
+		defer func() {
+			buf1.Reset()
+			buf2.Reset()
+		}()
+		Warn("this is a warn log")
+
+		assert.Equal(t, "[ WARN] this is a warn log", buf1.String())
+		assert.Empty(t, buf2.String())
+	})
+
+	t.Run("error", func(t *testing.T) {
+		defer func() {
+			buf1.Reset()
+			buf2.Reset()
+		}()
+		Error("this is an error log")
+
+		assert.Contains(t, buf1.String(), "()] this is an error log")
+		assert.Contains(t, buf2.String(), "()] this is an error log")
+	})
+
+	t.Run("fatal", func(t *testing.T) {
+		defer func() {
+			buf1.Reset()
+			buf2.Reset()
+		}()
+		Fatal("this is a fatal log")
+
+		assert.Contains(t, buf1.String(), "()] this is a fatal log")
+		assert.Contains(t, buf2.String(), "()] this is a fatal log")
 	})
 }
