@@ -64,6 +64,7 @@ func Test_ModeDiscord(t *testing.T) {
 	}
 
 	assert.Equal(t, 1, loggerMgr.num())
+	assert.Equal(t, ModeDiscord, loggerMgr.loggers[0].Mode())
 	assert.Equal(t, LevelInfo, loggerMgr.loggers[0].Level())
 }
 

@@ -9,10 +9,6 @@ import (
 // Mode is the output source.
 type Mode string
 
-//const (
-//	ModeFile    Mode = "file"
-//)
-
 // Level is the logging level.
 type Level int
 

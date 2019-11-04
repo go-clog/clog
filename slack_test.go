@@ -54,6 +54,7 @@ func Test_ModeSlack(t *testing.T) {
 	}
 
 	assert.Equal(t, 1, loggerMgr.num())
+	assert.Equal(t, ModeSlack, loggerMgr.loggers[0].Mode())
 	assert.Equal(t, LevelInfo, loggerMgr.loggers[0].Level())
 }
 

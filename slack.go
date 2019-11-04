@@ -100,13 +100,13 @@ func buildSlackPayload(colors []string, m Messager) (string, error) {
 func (l *slackLogger) postMessage(m Messager) {
 	payload, err := buildSlackPayload(l.colors, m)
 	if err != nil {
-		fmt.Printf("slackLogger: error building payload: %v", err)
+		fmt.Printf("slackLogger: error building payload: %v\n", err)
 		return
 	}
 
 	resp, err := http.Post(l.url, "application/json", bytes.NewReader([]byte(payload)))
 	if err != nil {
-		fmt.Printf("slackLogger: error making HTTP request: %v", err)
+		fmt.Printf("slackLogger: error making HTTP request: %v\n", err)
 		return
 	}
 	defer resp.Body.Close()
@@ -114,10 +114,10 @@ func (l *slackLogger) postMessage(m Messager) {
 	if resp.StatusCode/100 != 2 {
 		data, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			fmt.Printf("slackLogger: error reading HTTP response body: %v", err)
+			fmt.Printf("slackLogger: error reading HTTP response body: %v\n", err)
 			return
 		}
-		fmt.Printf("slackLogger: non-success response status code %d with body: %s", resp.StatusCode, data)
+		fmt.Printf("slackLogger: non-success response status code %d with body: %s\n", resp.StatusCode, data)
 	}
 }
 

@@ -157,7 +157,7 @@ func (l *discordLogger) postMessage(r io.Reader) (int64, error) {
 func (l *discordLogger) write(m Messager) {
 	payload, err := buildDiscordPayload(l.username, l.titles, l.colors, m)
 	if err != nil {
-		fmt.Printf("discordLogger: error building payload: %v", err)
+		fmt.Printf("discordLogger: error building payload: %v\n", err)
 		return
 	}
 
@@ -166,7 +166,7 @@ func (l *discordLogger) write(m Messager) {
 	for i := 1; i <= retryTimes; i++ {
 		retryAfter, err := l.postMessage(bytes.NewReader([]byte(payload)))
 		if err != nil {
-			fmt.Printf("discordLogger: error posting message: %v", err)
+			fmt.Printf("discordLogger: error posting message: %v\n", err)
 			return
 		}
 
@@ -178,7 +178,7 @@ func (l *discordLogger) write(m Messager) {
 		return
 	}
 
-	fmt.Printf("discordLogger: unable to post message after %d retries", retryTimes)
+	fmt.Printf("discordLogger: unable to post message after %d retries\n", retryTimes)
 }
 
 func (l *discordLogger) Write(m Messager) {

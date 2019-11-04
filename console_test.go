@@ -39,5 +39,6 @@ func Test_ModeConsole(t *testing.T) {
 	}
 
 	assert.Equal(t, 1, loggerMgr.num())
+	assert.Equal(t, ModeConsole, loggerMgr.loggers[0].Mode())
 	assert.Equal(t, LevelInfo, loggerMgr.loggers[0].Level())
 }
