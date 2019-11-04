@@ -12,10 +12,6 @@ To use a tagged revision:
 
 	go get gopkg.in/clog.v1
 
-To use with latest changes:
-
-	go get github.com/go-clog/clog
-    
 Please apply `-u` flag to update in the future.
 
 ### Testing
