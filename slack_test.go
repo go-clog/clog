@@ -21,10 +21,9 @@ func Test_ModeSlack(t *testing.T) {
 		{
 			name: "valid config",
 			config: SlackConfig{
-				Level:      LevelInfo,
-				BufferSize: 10,
-				URL:        "https://slack.com",
-				Colors:     slackColors,
+				Level:  LevelInfo,
+				URL:    "https://slack.com",
+				Colors: slackColors,
 			},
 			wantErr: nil,
 		},

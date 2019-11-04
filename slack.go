@@ -32,8 +32,6 @@ var slackColors = []string{
 type SlackConfig struct {
 	// Minimum level of messages to be processed.
 	Level Level
-	// Buffer size defines how many messages can be queued before hangs.
-	BufferSize int64
 	// Slack webhook URL.
 	URL string
 	// Colors for different levels, must have exact 5 elements in the order of

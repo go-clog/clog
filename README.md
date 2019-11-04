@@ -1,20 +1,18 @@
-# Clog [![Build Status](https://travis-ci.org/go-clog/clog.svg?branch=master)](https://travis-ci.org/go-clog/clog) [![GoDoc](https://godoc.org/gopkg.in/clog.v1?status.svg)](https://godoc.org/gopkg.in/clog.v1) [![Sourcegraph](https://sourcegraph.com/github.com/go-clog/clog/-/badge.svg)](https://sourcegraph.com/github.com/go-clog/clog?badge)
+# Clog 
+
+[![Build Status](https://img.shields.io/travis/go-clog/clog/master.svg?style=for-the-badge&logo=travis)](https://travis-ci.org/go-clog/clog) [![Sourcegraph](https://img.shields.io/badge/view%20on-Sourcegraph-brightgreen.svg?style=for-the-badge&logo=sourcegraph)](https://sourcegraph.com/github.com/go-clog/clog)
 
 ![](https://avatars1.githubusercontent.com/u/25576866?v=3&s=200)
 
 Clog is a channel-based logging package for Go.
 
-This package supports multiple logger adapters across different levels of logging. It uses Go's native channel feature to provide goroutine-safe mechanism on large concurrency.
+This package supports multiple loggers across different levels of logging. It uses Go's native channel feature to provide goroutine-safe mechanism on large concurrency.
 
 ## Installation
 
 To use a tagged revision:
 
-	go get gopkg.in/clog.v1
-
-To use with latest changes:
-
-	go get github.com/go-clog/clog
+	go get unknwon.dev/clog.v2
     
 Please apply `-u` flag to update in the future.
 
@@ -22,7 +20,7 @@ Please apply `-u` flag to update in the future.
 
 If you want to test on your machine, please apply `-t` flag:
 
-	go get -t gopkg.in/clog.v1
+	go get -t unknwon.dev/clog.v2
 
 Please apply `-u` flag to update in the future.
 
@@ -39,11 +37,12 @@ import (
 	"fmt"
 	"os"
 
-	log "gopkg.in/clog.v1"
+	log "unknwon.dev/clog.v2"
 )
 
 func init() {
-	err := log.New(log.CONSOLE, log.ConsoleConfig{})
+	// 0 means logging synchronously
+	err := log.New(log.ModeConsole, 0, log.ConsoleConfig{})
 	if err != nil {
 		fmt.Printf("Fail to create new logger: %v\n", err)
 		os.Exit(1)
@@ -64,9 +63,8 @@ The above code is equivalent to the follow settings:
 
 ```go
 ...
-	err := log.New(log.CONSOLE, log.ConsoleConfig{
-		Level:      log.TRACE, // Record all logs
-		BufferSize: 0,         // 0 means logging synchronously
+	err := log.New(log.ModeConsole, 0, log.ConsoleConfig{
+		Level:      log.LevelTrace, // Record all logs
 	})
 ...
 ```
@@ -75,11 +73,11 @@ In production, you may want to make log less verbose and asynchronous:
 
 ```go
 ...
-	err := log.New(log.CONSOLE, log.ConsoleConfig{
-		// Logs under INFO level (in this case TRACE) will be discarded
-		Level:      log.INFO, 
-		// Number mainly depends on how many logs will be produced by program, 100 is good enough
-		BufferSize: 100,      
+	// The buffer size mainly depends on how many logs will be produced at the same time,
+	// 100 is a good default.
+	err := log.New(log.ModeConsole, 100, log.ConsoleConfig{
+		// Logs under Info level (in this case Trace) will be discarded.
+		Level:      log.LevelInfo,
 	})
 ...
 ```
@@ -88,27 +86,24 @@ Console logger comes with color output, but for non-colorable destination, the c
 
 ### Error Location
 
-When using `log.Error` and `log.Fatal` functions, the first argument allows you to indicate whether to print the code location or not. 
+When using `log.Error` and `log.Fatal` functions, the caller location is printed along with the message. 
 
 ```go
 ...
-	// 0 means disable printing code location
-	log.Error(0, "So bad... %v", err)
-
-	// To print appropriate code location mainly depends on how deep your call stack is, 
-	// you need to try and verify
-	log.Error(2, "So bad... %v", err)
+	log.Error("So bad... %v", err)
 	// Output: 2017/02/09 01:06:16 [ERROR] [...uban-builder/main.go:64 main()] ...
-	log.Fatal(2, "Boom! %v", err)
+	log.Fatal("Boom! %v", err)
 	// Output: 2017/02/09 01:06:16 [FATAL] [...uban-builder/main.go:64 main()] ...
 ...
 ```
 
 Calling `log.Fatal` will exit the program.
 
-### Clean Shutdown
+If you want to have different skip depth than the default, you can use `log.ErrorDepth` or `log.FatalDepth`.
 
-If you set `BufferSize` greater than `0`, you should always call `log.Shutdown()` to wait until all messages are processed before program exit.
+### Clean Exit
+
+You should always call `log.Stop()` to wait until all messages are processed before program exits.
 
 ## File
 
@@ -116,9 +111,8 @@ File logger is more complex than console, and it has ability to rotate:
 
 ```go
 ...
-	err := log.New(log.FILE, log.FileConfig{
-		Level:              log.INFO, 
-		BufferSize:         100,  
+	err := log.New(log.ModeFile, 100, log.FileConfig{
+		Level:              log.LevelInfo, 
 		Filename:           "clog.log",  
 		FileRotationConfig: log.FileRotationConfig {
 			Rotate: true,
@@ -134,9 +128,8 @@ Slack logger is also supported in a simple way:
 
 ```go
 ...
-	err := log.New(log.SLACK, log.SlackConfig{
-		Level:              log.INFO, 
-		BufferSize:         100,  
+	err := log.New(log.ModeSlack, 100, log.SlackConfig{
+		Level:              log.LevelInfo, 
 		URL:                "https://url-to-slack-webhook",  
 	})
 ...
@@ -150,9 +143,8 @@ Discord logger is supported in rich format via [Embed Object](https://discordapp
 
 ```go
 ...
-	err := log.New(log.DISCORD, log.DiscordConfig{
-		Level:              log.INFO, 
-		BufferSize:         100,  
+	err := log.New(log.ModeDiscord, 100, log.DiscordConfig{
+		Level:              log.LevelInfo, 
 		URL:                "https://url-to-discord-webhook",  
 	})
 ...
@@ -166,4 +158,4 @@ This logger also retries automatically if hits rate limit after `retry_after`.
 
 ## License
 
-This project is under Apache v2 License. See the [LICENSE](LICENSE) file for the full license text.
+This project is under MIT License. See the [LICENSE](LICENSE) file for the full license text.

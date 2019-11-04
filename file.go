@@ -37,8 +37,6 @@ type FileRotationConfig struct {
 type FileConfig struct {
 	// Minimum level of messages to be processed.
 	Level Level
-	// Buffer size defines how many messages can be queued before hangs.
-	BufferSize int64
 	// File name to outout messages.
 	Filename string
 	// Rotation related configurations.
