@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -69,6 +70,8 @@ type discordLogger struct {
 	username string
 	titles   []string
 	colors   []int
+
+	client *http.Client
 }
 
 func (_ *discordLogger) Mode() Mode {
@@ -79,15 +82,22 @@ func (l *discordLogger) Level() Level {
 	return l.level
 }
 
-func buildDiscordPayload(username string, titles []string, colors []int, m Messager) (string, error) {
+func (l *discordLogger) buildPayload(m Messager) (string, error) {
+	descPrefixLen := strings.Index(m.String(), "] ")
+	if descPrefixLen == -1 {
+		descPrefixLen = 0
+	} else {
+		descPrefixLen += 2
+	}
+
 	payload := discordPayload{
-		Username: username,
+		Username: l.username,
 		Embeds: []*discordEmbed{
 			{
-				Title:       titles[m.Level()],
-				Description: m.String()[8:],
+				Title:       l.titles[m.Level()],
+				Description: m.String()[descPrefixLen:],
 				Timestamp:   time.Now().Format(time.RFC3339),
-				Color:       colors[m.Level()],
+				Color:       l.colors[m.Level()],
 			},
 		},
 	}
@@ -98,24 +108,22 @@ func buildDiscordPayload(username string, titles []string, colors []int, m Messa
 	return string(p), nil
 }
 
-type discordRateLimitMsg struct {
-	RetryAfter int64 `json:"retry_after"`
-}
-
 func (l *discordLogger) postMessage(r io.Reader) (int64, error) {
-	resp, err := http.Post(l.url, "application/json", r)
+	resp, err := l.client.Post(l.url, "application/json", r)
 	if err != nil {
 		return -1, fmt.Errorf("HTTP request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 429 {
-		rlMsg := &discordRateLimitMsg{}
-		if err = json.NewDecoder(resp.Body).Decode(&rlMsg); err != nil {
+		rateLimitMsg := struct {
+			RetryAfter int64 `json:"retry_after"`
+		}{}
+		if err = json.NewDecoder(resp.Body).Decode(&rateLimitMsg); err != nil {
 			return -1, fmt.Errorf("decode rate limit message: %v", err)
 		}
 
-		return rlMsg.RetryAfter, nil
+		return rateLimitMsg.RetryAfter, nil
 	} else if resp.StatusCode/100 != 2 {
 		data, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
@@ -128,7 +136,7 @@ func (l *discordLogger) postMessage(r io.Reader) (int64, error) {
 }
 
 func (l *discordLogger) Write(m Messager) error {
-	payload, err := buildDiscordPayload(l.username, l.titles, l.colors, m)
+	payload, err := l.buildPayload(m)
 	if err != nil {
 		return fmt.Errorf("build payload: %v", err)
 	}
@@ -185,6 +193,7 @@ func init() {
 			username: cfg.Username,
 			titles:   titles,
 			colors:   colors,
+			client:   http.DefaultClient,
 		}, nil
 	})
 }

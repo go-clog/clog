@@ -1,8 +1,11 @@
 package clog
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"io/ioutil"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -67,8 +70,13 @@ func Test_ModeDiscord(t *testing.T) {
 	assert.Equal(t, LevelInfo, mgr.loggers[0].Level())
 }
 
-func Test_buildDiscordPayload(t *testing.T) {
+func Test_discordLogger_buildPayload(t *testing.T) {
 	t.Run("default titles and colors", func(t *testing.T) {
+		l := &discordLogger{
+			titles: discordTitles,
+			colors: discordColors,
+		}
+
 		tests := []struct {
 			name      string
 			msg       *message
@@ -129,7 +137,7 @@ func Test_buildDiscordPayload(t *testing.T) {
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				payload, err := buildDiscordPayload("", discordTitles, discordColors, tt.msg)
+				payload, err := l.buildPayload(tt.msg)
 				assert.Nil(t, err)
 
 				obj := &discordPayload{}
@@ -145,8 +153,10 @@ func Test_buildDiscordPayload(t *testing.T) {
 	})
 
 	t.Run("custom titles and colors", func(t *testing.T) {
-		titles := []string{"1", "2", "3", "4", "5"}
-		colors := []int{1, 2, 3, 4, 5}
+		l := &discordLogger{
+			titles: []string{"1", "2", "3", "4", "5"},
+			colors: []int{1, 2, 3, 4, 5},
+		}
 
 		tests := []struct {
 			name      string
@@ -161,9 +171,9 @@ func Test_buildDiscordPayload(t *testing.T) {
 					level: LevelTrace,
 					body:  "[TRACE] test message",
 				},
-				wantTitle: titles[0],
+				wantTitle: l.titles[0],
 				wantDesc:  "test message",
-				wantColor: colors[0],
+				wantColor: l.colors[0],
 			},
 			{
 				name: "info",
@@ -171,9 +181,9 @@ func Test_buildDiscordPayload(t *testing.T) {
 					level: LevelInfo,
 					body:  "[ INFO] test message",
 				},
-				wantTitle: titles[1],
+				wantTitle: l.titles[1],
 				wantDesc:  "test message",
-				wantColor: colors[1],
+				wantColor: l.colors[1],
 			},
 			{
 				name: "warn",
@@ -181,9 +191,9 @@ func Test_buildDiscordPayload(t *testing.T) {
 					level: LevelWarn,
 					body:  "[ WARN] test message",
 				},
-				wantTitle: titles[2],
+				wantTitle: l.titles[2],
 				wantDesc:  "test message",
-				wantColor: colors[2],
+				wantColor: l.colors[2],
 			},
 			{
 				name: "error",
@@ -191,9 +201,9 @@ func Test_buildDiscordPayload(t *testing.T) {
 					level: LevelError,
 					body:  "[ERROR] test message",
 				},
-				wantTitle: titles[3],
+				wantTitle: l.titles[3],
 				wantDesc:  "test message",
-				wantColor: colors[3],
+				wantColor: l.colors[3],
 			},
 			{
 				name: "fatal",
@@ -201,14 +211,25 @@ func Test_buildDiscordPayload(t *testing.T) {
 					level: LevelFatal,
 					body:  "[FATAL] test message",
 				},
-				wantTitle: titles[4],
+				wantTitle: l.titles[4],
 				wantDesc:  "test message",
-				wantColor: colors[4],
+				wantColor: l.colors[4],
+			},
+
+			{
+				name: "trace",
+				msg: &message{
+					level: LevelTrace,
+					body:  "test message",
+				},
+				wantTitle: l.titles[0],
+				wantDesc:  "test message",
+				wantColor: l.colors[0],
 			},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				payload, err := buildDiscordPayload("", titles, colors, tt.msg)
+				payload, err := l.buildPayload(tt.msg)
 				assert.Nil(t, err)
 
 				obj := &discordPayload{}
@@ -222,4 +243,66 @@ func Test_buildDiscordPayload(t *testing.T) {
 			})
 		}
 	})
+}
+
+func Test_discordLogger_postMessage(t *testing.T) {
+	l := &discordLogger{
+		client: &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) *http.Response {
+				statusCode := 500
+				respBody := ""
+				switch req.URL.String() {
+				case "https://discordapp.com/success":
+					statusCode = 200
+					respBody = `OK`
+				case "https://discordapp.com/non-success-response-status-code":
+					statusCode = 404
+					respBody = `Page Not Found`
+				case "https://discordapp.com/retry-after":
+					statusCode = 429
+					respBody = `{"retry_after": 123456}`
+				}
+
+				return &http.Response{
+					StatusCode: statusCode,
+					Body:       ioutil.NopCloser(bytes.NewBufferString(respBody)),
+					Header:     make(http.Header),
+				}
+			}),
+		},
+	}
+
+	tests := []struct {
+		name      string
+		url       string
+		wantRetry int64
+		wantErr   error
+	}{
+		{
+			name:      "success",
+			url:       "https://discordapp.com/success",
+			wantRetry: -1,
+			wantErr:   nil,
+		},
+		{
+			name:      "non-success response status code",
+			url:       "https://discordapp.com/non-success-response-status-code",
+			wantRetry: -1,
+			wantErr:   errors.New("non-success response status code 404 with body: Page Not Found"),
+		},
+		{
+			name:      "retry after",
+			url:       "https://discordapp.com/retry-after",
+			wantRetry: 123456,
+			wantErr:   nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l.url = tt.url
+			retryAfter, err := l.postMessage(bytes.NewReader([]byte("payload")))
+			assert.Equal(t, tt.wantRetry, retryAfter)
+			assert.Equal(t, tt.wantErr, err)
+		})
+	}
 }

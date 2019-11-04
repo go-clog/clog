@@ -1,7 +1,10 @@
 package clog
 
 import (
+	"bytes"
 	"errors"
+	"io/ioutil"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -57,8 +60,12 @@ func Test_ModeSlack(t *testing.T) {
 	assert.Equal(t, LevelInfo, mgr.loggers[0].Level())
 }
 
-func Test_buildSlackPayload(t *testing.T) {
+func Test_slackLogger_buildPayload(t *testing.T) {
 	t.Run("default colors", func(t *testing.T) {
+		l := &slackLogger{
+			colors: slackColors,
+		}
+
 		tests := []struct {
 			name string
 			msg  *message
@@ -107,7 +114,7 @@ func Test_buildSlackPayload(t *testing.T) {
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				payload, err := buildSlackPayload(slackColors, tt.msg)
+				payload, err := l.buildPayload(tt.msg)
 				assert.Nil(t, err)
 				assert.Equal(t, tt.want, payload)
 			})
@@ -115,7 +122,9 @@ func Test_buildSlackPayload(t *testing.T) {
 	})
 
 	t.Run("custom colors", func(t *testing.T) {
-		colors := []string{"#1", "#2", "#3", "#4", "#5"}
+		l := &slackLogger{
+			colors: []string{"#1", "#2", "#3", "#4", "#5"},
+		}
 
 		tests := []struct {
 			name string
@@ -165,10 +174,64 @@ func Test_buildSlackPayload(t *testing.T) {
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				payload, err := buildSlackPayload(colors, tt.msg)
+				payload, err := l.buildPayload(tt.msg)
 				assert.Nil(t, err)
 				assert.Equal(t, tt.want, payload)
 			})
 		}
 	})
+}
+
+type roundTripFunc func(req *http.Request) *http.Response
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req), nil
+}
+
+func Test_slackLogger_postMessage(t *testing.T) {
+	l := &slackLogger{
+		client: &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) *http.Response {
+				statusCode := 500
+				respBody := ""
+				switch req.URL.String() {
+				case "https://slack.com/success":
+					statusCode = 200
+					respBody = `OK`
+				case "https://slack.com/non-success-response-status-code":
+					statusCode = 404
+					respBody = `Page Not Found`
+				}
+
+				return &http.Response{
+					StatusCode: statusCode,
+					Body:       ioutil.NopCloser(bytes.NewBufferString(respBody)),
+					Header:     make(http.Header),
+				}
+			}),
+		},
+	}
+
+	tests := []struct {
+		name    string
+		url     string
+		wantErr error
+	}{
+		{
+			name:    "success",
+			url:     "https://slack.com/success",
+			wantErr: nil,
+		},
+		{
+			name:    "non-success response status code",
+			url:     "https://slack.com/non-success-response-status-code",
+			wantErr: errors.New("non-success response status code 404 with body: Page Not Found"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l.url = tt.url
+			assert.Equal(t, tt.wantErr, l.postMessage(bytes.NewReader([]byte("payload"))))
+		})
+	}
 }

@@ -45,6 +45,8 @@ type slackLogger struct {
 	level  Level
 	url    string
 	colors []string
+
+	client *http.Client
 }
 
 func (_ *slackLogger) Mode() Mode {
@@ -55,12 +57,12 @@ func (l *slackLogger) Level() Level {
 	return l.level
 }
 
-func buildSlackPayload(colors []string, m Messager) (string, error) {
+func (l *slackLogger) buildPayload(m Messager) (string, error) {
 	payload := slackPayload{
 		Attachments: []slackAttachment{
 			{
 				Text:  m.String(),
-				Color: colors[m.Level()],
+				Color: l.colors[m.Level()],
 			},
 		},
 	}
@@ -72,7 +74,7 @@ func buildSlackPayload(colors []string, m Messager) (string, error) {
 }
 
 func (l *slackLogger) postMessage(r io.Reader) error {
-	resp, err := http.Post(l.url, "application/json", r)
+	resp, err := l.client.Post(l.url, "application/json", r)
 	if err != nil {
 		return fmt.Errorf("HTTP request: %v", err)
 	}
@@ -89,7 +91,7 @@ func (l *slackLogger) postMessage(r io.Reader) error {
 }
 
 func (l *slackLogger) Write(m Messager) error {
-	payload, err := buildSlackPayload(l.colors, m)
+	payload, err := l.buildPayload(m)
 	if err != nil {
 		return fmt.Errorf("build payload: %v", err)
 	}
@@ -124,6 +126,7 @@ func init() {
 			level:  cfg.Level,
 			url:    cfg.URL,
 			colors: colors,
+			client: http.DefaultClient,
 		}, nil
 	})
 }
