@@ -11,7 +11,6 @@ type Mode string
 
 //const (
 //	ModeFile    Mode = "file"
-//	ModeDiscord Mode = "discord"
 //)
 
 // Level is the logging level.

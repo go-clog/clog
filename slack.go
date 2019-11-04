@@ -65,7 +65,7 @@ loop:
 	for {
 		select {
 		case m := <-l.msgChan:
-			l.write(m)
+			l.postMessage(m)
 		case <-ctx.Done():
 			break loop
 		}
@@ -76,7 +76,7 @@ loop:
 			break
 		}
 
-		l.write(<-l.msgChan)
+		l.postMessage(<-l.msgChan)
 	}
 	l.doneChan <- struct{}{} // Notify the cleanup is done.
 }
@@ -97,7 +97,7 @@ func buildSlackPayload(colors []string, m Messager) (string, error) {
 	return string(p), nil
 }
 
-func (l *slackLogger) write(m Messager) {
+func (l *slackLogger) postMessage(m Messager) {
 	payload, err := buildSlackPayload(l.colors, m)
 	if err != nil {
 		fmt.Printf("slackLogger: error building payload: %v", err)
@@ -117,7 +117,7 @@ func (l *slackLogger) write(m Messager) {
 			fmt.Printf("slackLogger: error reading HTTP response body: %v", err)
 			return
 		}
-		fmt.Printf("slackLogger: non-success response status code %d with body: %s", resp.StatusCode, string(data))
+		fmt.Printf("slackLogger: non-success response status code %d with body: %s", resp.StatusCode, data)
 	}
 }
 

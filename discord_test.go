@@ -1,67 +1,225 @@
-// Copyright 2018 Unknwon
-//
-// Licensed under the Apache License, Version 2.0 (the "License"): you may
-// not use this file except in compliance with the License. You may obtain
-// a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-// License for the specific language governing permissions and limitations
-// under the License.
-
 package clog
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 
-	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/assert"
 )
 
-func Test_discord_Init(t *testing.T) {
-	Convey("Init Discord logger", t, func() {
-		Convey("Mismatched config object", func() {
-			err := New(DISCORD, struct{}{})
-			So(err, ShouldNotBeNil)
-			_, ok := err.(ErrConfigObject)
-			So(ok, ShouldBeTrue)
-		})
+func Test_ModeDiscord(t *testing.T) {
+	defer func() {
+		Remove(ModeDiscord)
+	}()
 
-		Convey("Valid config object", func() {
-			So(New(DISCORD, DiscordConfig{
-				URL: "https://discordapp.com",
-			}), ShouldBeNil)
-
-			Convey("Incorrect level", func() {
-				err := New(SLACK, SlackConfig{
-					Level: LEVEL(-1),
-				})
-				So(err, ShouldNotBeNil)
-				_, ok := err.(ErrInvalidLevel)
-				So(ok, ShouldBeTrue)
-			})
+	tests := []struct {
+		name      string
+		config    interface{}
+		wantLevel Level
+		wantErr   error
+	}{
+		{
+			name: "valid config",
+			config: DiscordConfig{
+				Level:      LevelInfo,
+				BufferSize: 10,
+				URL:        "https://discordapp.com",
+				Titles:     discordTitles,
+				Colors:     discordColors,
+			},
+			wantErr: nil,
+		},
+		{
+			name:    "invalid config",
+			config:  "random things",
+			wantErr: errors.New("initialize logger: invalid config object: want clog.DiscordConfig got string"),
+		},
+		{
+			name:    "invalid URL",
+			config:  DiscordConfig{},
+			wantErr: errors.New("initialize logger: empty URL"),
+		},
+		{
+			name: "incorrect number of titles",
+			config: DiscordConfig{
+				URL:    "https://discordapp.com",
+				Titles: []string{},
+			},
+			wantErr: errors.New("initialize logger: titles must have exact 5 elements, but got 0"),
+		},
+		{
+			name: "incorrect number of colors",
+			config: DiscordConfig{
+				URL:    "https://discordapp.com",
+				Colors: []int{},
+			},
+			wantErr: errors.New("initialize logger: colors must have exact 5 elements, but got 0"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.wantErr, New(ModeDiscord, tt.config))
 		})
-	})
+	}
+
+	assert.Equal(t, 1, loggerMgr.num())
+	assert.Equal(t, LevelInfo, loggerMgr.loggers[0].Level())
 }
 
 func Test_buildDiscordPayload(t *testing.T) {
-	Convey("Build Discord payload", t, func() {
-		payload, err := buildDiscordPayload("clog", &Message{
-			Level: INFO,
-			Body:  "[ INFO] test message",
-		})
-		So(err, ShouldBeNil)
+	t.Run("default titles and colors", func(t *testing.T) {
+		tests := []struct {
+			name      string
+			msg       *message
+			wantTitle string
+			wantDesc  string
+			wantColor int
+		}{
+			{
+				name: "trace",
+				msg: &message{
+					level: LevelTrace,
+					body:  "[TRACE] test message",
+				},
+				wantTitle: discordTitles[0],
+				wantDesc:  "test message",
+				wantColor: discordColors[0],
+			},
+			{
+				name: "info",
+				msg: &message{
+					level: LevelInfo,
+					body:  "[ INFO] test message",
+				},
+				wantTitle: discordTitles[1],
+				wantDesc:  "test message",
+				wantColor: discordColors[1],
+			},
+			{
+				name: "warn",
+				msg: &message{
+					level: LevelWarn,
+					body:  "[ WARN] test message",
+				},
+				wantTitle: discordTitles[2],
+				wantDesc:  "test message",
+				wantColor: discordColors[2],
+			},
+			{
+				name: "error",
+				msg: &message{
+					level: LevelError,
+					body:  "[ERROR] test message",
+				},
+				wantTitle: discordTitles[3],
+				wantDesc:  "test message",
+				wantColor: discordColors[3],
+			},
+			{
+				name: "fatal",
+				msg: &message{
+					level: LevelFatal,
+					body:  "[FATAL] test message",
+				},
+				wantTitle: discordTitles[4],
+				wantDesc:  "test message",
+				wantColor: discordColors[4],
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				payload, err := buildDiscordPayload("", discordTitles, discordColors, tt.msg)
+				assert.Nil(t, err)
 
-		obj := &discordPayload{}
-		So(json.Unmarshal([]byte(payload), obj), ShouldBeNil)
-		So(obj.Username, ShouldEqual, "clog")
-		So(len(obj.Embeds), ShouldEqual, 1)
-		So(obj.Embeds[0].Title, ShouldEqual, "Information")
-		So(obj.Embeds[0].Description, ShouldEqual, "test message")
-		So(obj.Embeds[0].Timestamp, ShouldNotBeEmpty)
-		So(obj.Embeds[0].Color, ShouldEqual, 3843043)
+				obj := &discordPayload{}
+				assert.Nil(t, json.Unmarshal([]byte(payload), obj))
+				assert.Len(t, obj.Embeds, 1)
+
+				assert.Equal(t, tt.wantTitle, obj.Embeds[0].Title)
+				assert.Equal(t, tt.wantDesc, obj.Embeds[0].Description)
+				assert.NotEmpty(t, obj.Embeds[0].Timestamp)
+				assert.Equal(t, tt.wantColor, obj.Embeds[0].Color)
+			})
+		}
+	})
+
+	t.Run("custom titles and colors", func(t *testing.T) {
+		titles := []string{"1", "2", "3", "4", "5"}
+		colors := []int{1, 2, 3, 4, 5}
+
+		tests := []struct {
+			name      string
+			msg       *message
+			wantTitle string
+			wantDesc  string
+			wantColor int
+		}{
+			{
+				name: "trace",
+				msg: &message{
+					level: LevelTrace,
+					body:  "[TRACE] test message",
+				},
+				wantTitle: titles[0],
+				wantDesc:  "test message",
+				wantColor: colors[0],
+			},
+			{
+				name: "info",
+				msg: &message{
+					level: LevelInfo,
+					body:  "[ INFO] test message",
+				},
+				wantTitle: titles[1],
+				wantDesc:  "test message",
+				wantColor: colors[1],
+			},
+			{
+				name: "warn",
+				msg: &message{
+					level: LevelWarn,
+					body:  "[ WARN] test message",
+				},
+				wantTitle: titles[2],
+				wantDesc:  "test message",
+				wantColor: colors[2],
+			},
+			{
+				name: "error",
+				msg: &message{
+					level: LevelError,
+					body:  "[ERROR] test message",
+				},
+				wantTitle: titles[3],
+				wantDesc:  "test message",
+				wantColor: colors[3],
+			},
+			{
+				name: "fatal",
+				msg: &message{
+					level: LevelFatal,
+					body:  "[FATAL] test message",
+				},
+				wantTitle: titles[4],
+				wantDesc:  "test message",
+				wantColor: colors[4],
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				payload, err := buildDiscordPayload("", titles, colors, tt.msg)
+				assert.Nil(t, err)
+
+				obj := &discordPayload{}
+				assert.Nil(t, json.Unmarshal([]byte(payload), obj))
+				assert.Len(t, obj.Embeds, 1)
+
+				assert.Equal(t, tt.wantTitle, obj.Embeds[0].Title)
+				assert.Equal(t, tt.wantDesc, obj.Embeds[0].Description)
+				assert.NotEmpty(t, obj.Embeds[0].Timestamp)
+				assert.Equal(t, tt.wantColor, obj.Embeds[0].Color)
+			})
+		}
 	})
 }
