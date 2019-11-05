@@ -54,6 +54,9 @@ func init() {
 	log.Info("Hello %s!", "Clog")
 	log.Warn("Hello %s!", "Clog")
 	...
+	
+	// Graceful stopping all loggers before exiting the program.
+	log.Stop()
 }
 
 ...
