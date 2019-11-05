@@ -1,7 +1,6 @@
 package clog
 
 import (
-	"bytes"
 	"fmt"
 	"testing"
 
@@ -21,32 +20,34 @@ func TestLevel_String(t *testing.T) {
 	_ = invalidLevel.String()
 }
 
-type bufConfig struct {
-	buf *bytes.Buffer
+type chanConfig struct {
+	c chan string
 }
 
-var _ Logger = (*bufLogger)(nil)
+var _ Logger = (*chanLogger)(nil)
 
-type bufLogger struct {
-	buf *bytes.Buffer
+type chanLogger struct {
+	c chan string
 	*noopLogger
 }
 
-func (l *bufLogger) Write(m Messager) error {
-	_, err := l.buf.WriteString(m.String() + "\n")
-	return err
+func (l *chanLogger) Write(m Messager) error {
+	fmt.Println(1, m)
+	l.c <- m.String()
+	fmt.Println(2, m)
+	return nil
 }
 
-func Test_memoryLogger(t *testing.T) {
+func Test_chanLogger(t *testing.T) {
 	mode1 := Mode("mode1")
 	level1 := LevelTrace
 	NewRegister(mode1, func(v interface{}) (Logger, error) {
-		cfg, ok := v.(bufConfig)
+		cfg, ok := v.(chanConfig)
 		if !ok {
-			return nil, fmt.Errorf("invalid config object: want %T got %T", bufConfig{}, v)
+			return nil, fmt.Errorf("invalid config object: want %T got %T", chanConfig{}, v)
 		}
-		return &bufLogger{
-			buf: cfg.buf,
+		return &chanLogger{
+			c: cfg.c,
 			noopLogger: &noopLogger{
 				mode:  mode1,
 				level: level1,
@@ -57,12 +58,12 @@ func Test_memoryLogger(t *testing.T) {
 	mode2 := Mode("mode2")
 	level2 := LevelError
 	NewRegister(mode2, func(v interface{}) (Logger, error) {
-		cfg, ok := v.(bufConfig)
+		cfg, ok := v.(chanConfig)
 		if !ok {
-			return nil, fmt.Errorf("invalid config object: want %T got %T", &bufConfig{}, v)
+			return nil, fmt.Errorf("invalid config object: want %T got %T", &chanConfig{}, v)
 		}
-		return &bufLogger{
-			buf: cfg.buf,
+		return &chanLogger{
+			c: cfg.c,
 			noopLogger: &noopLogger{
 				mode:  mode2,
 				level: level2,
@@ -107,24 +108,27 @@ func Test_memoryLogger(t *testing.T) {
 			containsStr2: "()] log message",
 		},
 	}
+
+	c1 := make(chan string)
+	c2 := make(chan string)
+	assert.Nil(t, New(mode1, 1, chanConfig{
+		c: c1,
+	}))
+	assert.Nil(t, New(mode2, 1, chanConfig{
+		c: c2,
+	}))
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			defer initManager()
-			var buf1, buf2 bytes.Buffer
-			assert.Nil(t, New(mode1, 2, bufConfig{
-				buf: &buf1,
-			}))
-			assert.Nil(t, New(mode2, 2, bufConfig{
-				buf: &buf2,
-			}))
 			assert.Equal(t, 2, mgr.len())
 
 			tt.fn("log message")
-			tt.fn("log message")
-			Stop()
 
-			assert.Contains(t, buf1.String(), tt.containsStr1)
-			assert.Contains(t, buf2.String(), tt.containsStr2)
+			assert.Contains(t, <-c1, tt.containsStr1)
+
+			if tt.containsStr2 != "" {
+				assert.Contains(t, <-c2, tt.containsStr2)
+			}
 		})
 	}
 }

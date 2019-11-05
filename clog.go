@@ -74,11 +74,12 @@ var inTest = false
 // FatalDepth writes formatted log with given skip depth in Fatal level then exits.
 func FatalDepth(skip int, format string, v ...interface{}) {
 	mgr.write(LevelFatal, skip, format, v...)
-	Stop()
 
 	if inTest {
 		return
 	}
+
+	Stop()
 	os.Exit(1)
 }
 
