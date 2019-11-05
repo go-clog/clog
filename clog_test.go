@@ -109,6 +109,9 @@ func Test_chanLogger(t *testing.T) {
 
 	c1 := make(chan string)
 	c2 := make(chan string)
+
+	defer Remove(mode1)
+	defer Remove(mode2)
 	assert.Nil(t, New(mode1, 1, chanConfig{
 		c: c1,
 	}))
