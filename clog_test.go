@@ -32,9 +32,7 @@ type chanLogger struct {
 }
 
 func (l *chanLogger) Write(m Messager) error {
-	fmt.Println(1, m)
 	l.c <- m.String()
-	fmt.Println(2, m)
 	return nil
 }
 
