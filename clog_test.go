@@ -8,7 +8,7 @@ import (
 )
 
 func init() {
-	inTest = true
+	isTestEnv = true
 }
 
 func TestLevel_String(t *testing.T) {

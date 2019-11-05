@@ -19,8 +19,8 @@ type Logger interface {
 	Write(Messager) error
 }
 
-// Register is a factory function taht returns a new Logger.
-// It accepts a configuration struct specifically for the Logger.
+// Register is a factory function taht returns a new logger.
+// It accepts a configuration struct specifically for the logger.
 type Register func(interface{}) (Logger, error)
 
 var registers = map[Mode]Register{}
@@ -113,8 +113,8 @@ func init() {
 	initManager()
 }
 
-// New initializes and appends a new Logger to the managed list.
-// Calling this function multiple times will overwrite previous Logger with same mode.
+// New initializes and appends a new logger to the managed list.
+// Calling this function multiple times will overwrite previous logger with same mode.
 //
 // This function is not concurrent safe.
 func New(mode Mode, bufferSize int64, cfg interface{}) error {
@@ -136,13 +136,13 @@ func New(mode Mode, bufferSize int64, cfg interface{}) error {
 		Logger:  l,
 	}
 
-	// Check and replace previous logger.
+	// Check and replace previous logger
 	found := false
 	for i, l := range mgr.loggers {
 		if l.Mode() == mode {
 			found = true
 
-			// Release previous logger.
+			// Release previous logger
 			l.cancel()
 			<-l.done
 
@@ -165,7 +165,7 @@ func New(mode Mode, bufferSize int64, cfg interface{}) error {
 			}
 		}
 
-		// Drain the msgChan at best effort.
+		// Drain the msgChan at best effort
 		for {
 			if len(cl.msgChan) == 0 {
 				break
@@ -174,7 +174,7 @@ func New(mode Mode, bufferSize int64, cfg interface{}) error {
 			cl.error(cl.Write(<-cl.msgChan))
 		}
 
-		// Notify the cleanup is done.
+		// Notify the cleanup is done
 		cl.done <- struct{}{}
 	}()
 	return nil

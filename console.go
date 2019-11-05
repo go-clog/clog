@@ -7,6 +7,7 @@ import (
 	"github.com/fatih/color"
 )
 
+// ModeConsole is used to indicate console logger.
 const ModeConsole Mode = "console"
 
 // Console color set for different levels.
@@ -18,7 +19,7 @@ var consoleColors = []func(a ...interface{}) string{
 	color.New(color.FgHiRed).SprintFunc(),  // Fatal
 }
 
-// ConsoleConfig is the config object for the "console" mode logger.
+// ConsoleConfig is the config object for the console logger.
 type ConsoleConfig struct {
 	// Minimum logging level of messages to be processed.
 	Level Level
@@ -31,7 +32,7 @@ type consoleLogger struct {
 	*log.Logger
 }
 
-func (_ *consoleLogger) Mode() Mode {
+func (*consoleLogger) Mode() Mode {
 	return ModeConsole
 }
 

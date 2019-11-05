@@ -1,4 +1,4 @@
-// Clog is a channel-based logging package for Go.
+// Package clog is a channel-based logging package for Go.
 package clog
 
 import (
@@ -12,6 +12,7 @@ type Mode string
 // Level is the logging level.
 type Level int
 
+// Available logging levels.
 const (
 	LevelTrace Level = iota
 	LevelInfo
@@ -33,7 +34,7 @@ func (l Level) String() string {
 	case LevelFatal:
 		return "FATAL"
 	default:
-		fmt.Printf("Unexpected value: %v\n", int(l))
+		fmt.Printf("Unexpected Level value: %v\n", int(l))
 		panic("unreachable")
 	}
 }
@@ -68,14 +69,15 @@ func Fatal(format string, v ...interface{}) {
 	FatalDepth(4, format, v...)
 }
 
-// In test environment, calling Fatal or FatalDepth won't actually exit the program.
-var inTest = false
+// isTestEnv is true when running tests.
+// In test environment, Fatal or FatalDepth won't stop the manager or exit the program.
+var isTestEnv = false
 
 // FatalDepth writes formatted log with given skip depth in Fatal level then exits.
 func FatalDepth(skip int, format string, v ...interface{}) {
 	mgr.write(LevelFatal, skip, format, v...)
 
-	if inTest {
+	if isTestEnv {
 		return
 	}
 
@@ -84,6 +86,7 @@ func FatalDepth(skip int, format string, v ...interface{}) {
 }
 
 // Stop propagates cancellation to all loggers and waits for completion.
+// This function should always be called before exiting the program.
 func Stop() {
 	mgr.stop()
 }

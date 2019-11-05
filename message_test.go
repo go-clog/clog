@@ -7,7 +7,7 @@ import (
 )
 
 func Test_newMessage(t *testing.T) {
-	t.Run("No skip", func(t *testing.T) {
+	t.Run("no skip", func(t *testing.T) {
 		tests := []struct {
 			name   string
 			level  Level
@@ -60,7 +60,7 @@ func Test_newMessage(t *testing.T) {
 		}
 	})
 
-	t.Run("Has skip", func(t *testing.T) {
+	t.Run("has skip", func(t *testing.T) {
 		tests := []struct {
 			name     string
 			level    Level

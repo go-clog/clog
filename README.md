@@ -4,7 +4,7 @@
 
 ![](https://avatars1.githubusercontent.com/u/25576866?v=3&s=200)
 
-Clog is a channel-based logging package for Go.
+Package clog is a channel-based logging package for Go.
 
 This package supports multiple loggers across different levels of logging. It uses Go's native channel feature to provide goroutine-safe mechanism on large concurrency.
 

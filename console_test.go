@@ -8,9 +8,7 @@ import (
 )
 
 func Test_ModeConsole(t *testing.T) {
-	defer func() {
-		Remove(ModeConsole)
-	}()
+	defer Remove(ModeConsole)
 
 	tests := []struct {
 		name      string

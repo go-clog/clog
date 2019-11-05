@@ -11,9 +11,7 @@ import (
 )
 
 func Test_ModeFile(t *testing.T) {
-	defer func() {
-		Remove(ModeFile)
-	}()
+	defer Remove(ModeFile)
 
 	tests := []struct {
 		name      string
@@ -39,7 +37,7 @@ func Test_ModeFile(t *testing.T) {
 			config: FileConfig{
 				Level: LevelInfo,
 			},
-			wantErr: errors.New(`initialize logger: init file "": OpenFile '': open : no such file or directory`),
+			wantErr: errors.New(`initialize logger: init file "": open file "": open : no such file or directory`),
 		},
 	}
 	for _, tt := range tests {

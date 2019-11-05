@@ -12,6 +12,7 @@ import (
 	"time"
 )
 
+// ModeFile is used to indicate file logger.
 const ModeFile Mode = "file"
 
 const (
@@ -34,10 +35,11 @@ type FileRotationConfig struct {
 	MaxDays int64
 }
 
+// FileConfig is the config object for the file logger.
 type FileConfig struct {
 	// Minimum level of messages to be processed.
 	Level Level
-	// File name to outout messages.
+	// File name to output messages.
 	Filename string
 	// Rotation related configurations.
 	FileRotationConfig
@@ -46,7 +48,8 @@ type FileConfig struct {
 var _ Logger = (*fileLogger)(nil)
 
 type fileLogger struct {
-	// Indicates whether object is been used in standalone mode.
+	// Indicates whether it is being used as standalone logger.
+	// It is only true when the logger is created by NewFileWriter.
 	standalone bool
 
 	level Level
@@ -63,7 +66,7 @@ type fileLogger struct {
 	*log.Logger
 }
 
-func (_ *fileLogger) Mode() Mode {
+func (*fileLogger) Mode() Mode {
 	return ModeFile
 }
 
@@ -76,21 +79,20 @@ var newLineBytes = []byte("\n")
 func (l *fileLogger) initFile() (err error) {
 	l.file, err = os.OpenFile(l.filename, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0660)
 	if err != nil {
-		return fmt.Errorf("OpenFile '%s': %v", l.filename, err)
+		return fmt.Errorf("open file %q: %v", l.filename, err)
 	}
 
 	l.Logger = log.New(l.file, "", log.Ldate|log.Ltime)
 	return nil
 }
 
-// isExist checks whether a file or directory exists.
-// It returns false when the file or directory does not exist.
+// isExist returns true if the file or directory exists.
 func isExist(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil || os.IsExist(err)
 }
 
-// rotateFilename returns next available rotate filename with given date.
+// rotateFilename returns next available rotate filename in given date.
 func rotateFilename(filename, date string) string {
 	filename = fmt.Sprintf("%s.%s", filename, date)
 	if !isExist(filename) {
@@ -108,12 +110,12 @@ func rotateFilename(filename, date string) string {
 	panic("too many log files for yesterday, already reached 999")
 }
 
-func (l *fileLogger) deleteOutdatedFiles() {
-	_ = filepath.Walk(filepath.Dir(l.filename), func(path string, info os.FileInfo, err error) error {
-		if !info.IsDir() &&
-			info.ModTime().Before(time.Now().Add(-24*time.Hour*time.Duration(l.rotationConfig.MaxDays))) &&
+func (l *fileLogger) deleteOutdatedFiles() error {
+	return filepath.Walk(filepath.Dir(l.filename), func(path string, fi os.FileInfo, _ error) error {
+		if !fi.IsDir() &&
+			fi.ModTime().Before(time.Now().Add(-24*time.Hour*time.Duration(l.rotationConfig.MaxDays))) &&
 			strings.HasPrefix(filepath.Base(path), filepath.Base(l.filename)) {
-			_ = os.Remove(path)
+			return os.Remove(path)
 		}
 		return nil
 	})
@@ -123,7 +125,7 @@ func (l *fileLogger) initRotation() error {
 	// Gather basic file info for rotation.
 	fi, err := l.file.Stat()
 	if err != nil {
-		return fmt.Errorf("Stat: %v", err)
+		return fmt.Errorf("stat: %v", err)
 	}
 
 	l.currentSize = fi.Size()
@@ -132,7 +134,7 @@ func (l *fileLogger) initRotation() error {
 	if l.rotationConfig.MaxLines > 0 && l.currentSize > 0 {
 		data, err := ioutil.ReadFile(l.filename)
 		if err != nil {
-			return fmt.Errorf("ReadFile '%s': %v", l.filename, err)
+			return fmt.Errorf("read file %q: %v", l.filename, err)
 		}
 
 		l.currentLines = int64(bytes.Count(data, newLineBytes)) + 1
@@ -148,20 +150,22 @@ func (l *fileLogger) initRotation() error {
 			lastWriteTime.Day() != now.Day() {
 
 			if err = l.file.Close(); err != nil {
-				return fmt.Errorf("Close: %v", err)
+				return fmt.Errorf("close current file: %v", err)
 			}
 			if err = os.Rename(l.filename, rotateFilename(l.filename, lastWriteTime.Format(simpleDateFormat))); err != nil {
-				return fmt.Errorf("Rename: %v", err)
+				return fmt.Errorf("rename rotate file: %v", err)
 			}
 
 			if err = l.initFile(); err != nil {
-				return fmt.Errorf("initFile: %v", err)
+				return fmt.Errorf("init file: %v", err)
 			}
 		}
 	}
 
 	if l.rotationConfig.MaxDays > 0 {
-		l.deleteOutdatedFiles()
+		if err = l.deleteOutdatedFiles(); err != nil {
+			return fmt.Errorf("delete outdated files: %v", err)
+		}
 	}
 	return nil
 }
@@ -224,7 +228,7 @@ func (l *fileLogger) init() error {
 
 	if l.rotationConfig.Rotate {
 		if err := l.initRotation(); err != nil {
-			return fmt.Errorf("init rotate: %v", err)
+			return fmt.Errorf("init rotation: %v", err)
 		}
 	}
 	return nil
@@ -257,7 +261,7 @@ type fileWriter struct {
 	*fileLogger
 }
 
-// NewFileWriter returns an io.Writer for synchronized file logger in standalone mode.
+// NewFileWriter returns an io.Writer for synchronized file logger.
 func NewFileWriter(filename string, cfg FileRotationConfig) (io.Writer, error) {
 	f := &fileLogger{
 		standalone:     true,
@@ -265,7 +269,7 @@ func NewFileWriter(filename string, cfg FileRotationConfig) (io.Writer, error) {
 		rotationConfig: cfg,
 	}
 	if err := f.init(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("init: %v", err)
 	}
 
 	return &fileWriter{f}, nil

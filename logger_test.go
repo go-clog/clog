@@ -72,10 +72,8 @@ func (l *noopLogger) Write(_ Messager) error { return nil }
 func TestNew(t *testing.T) {
 	testModeGood := Mode("TestNew_good")
 	testModeBad := Mode("TestNew_bad")
-	defer func() {
-		Remove(testModeGood)
-		Remove(testModeBad)
-	}()
+	defer Remove(testModeGood)
+	defer Remove(testModeBad)
 
 	NewRegister(testModeGood,
 		func(_ interface{}) (Logger, error) {

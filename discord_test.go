@@ -12,9 +12,7 @@ import (
 )
 
 func Test_ModeDiscord(t *testing.T) {
-	defer func() {
-		Remove(ModeDiscord)
-	}()
+	defer Remove(ModeDiscord)
 
 	tests := []struct {
 		name      string

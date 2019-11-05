@@ -11,9 +11,7 @@ import (
 )
 
 func Test_ModeSlack(t *testing.T) {
-	defer func() {
-		Remove(ModeSlack)
-	}()
+	defer Remove(ModeSlack)
 
 	tests := []struct {
 		name      string

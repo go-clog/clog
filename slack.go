@@ -10,6 +10,7 @@ import (
 	"net/http"
 )
 
+// ModeSlack is used to indicate Slack logger.
 const ModeSlack Mode = "slack"
 
 type slackAttachment struct {
@@ -29,8 +30,9 @@ var slackColors = []string{
 	"#ff0200", // Fatal
 }
 
+// SlackConfig is the config object for the Slack logger.
 type SlackConfig struct {
-	// Minimum level of messages to be processed.
+	// Minimum logging level of messages to be processed.
 	Level Level
 	// Slack webhook URL.
 	URL string
@@ -49,7 +51,7 @@ type slackLogger struct {
 	client *http.Client
 }
 
-func (_ *slackLogger) Mode() Mode {
+func (*slackLogger) Mode() Mode {
 	return ModeSlack
 }
 

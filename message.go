@@ -28,7 +28,7 @@ func newMessage(level Level, skip int, format string, v ...interface{}) *message
 	if level >= LevelError && skip > 0 {
 		pc, file, line, ok := runtime.Caller(skip)
 		if ok {
-			// Get caller function name.
+			// Get caller function name
 			fn := runtime.FuncForPC(pc)
 			var fnName string
 			if fn == nil {

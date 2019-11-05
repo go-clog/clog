@@ -12,6 +12,7 @@ import (
 	"time"
 )
 
+// ModeDiscord is used to indicate Discord logger.
 const ModeDiscord Mode = "discord"
 
 type (
@@ -46,12 +47,13 @@ var (
 	}
 )
 
+// DiscordConfig is the config object for the Discord logger.
 type DiscordConfig struct {
-	// Minimum level of messages to be processed.
+	// Minimum logging level of messages to be processed.
 	Level Level
 	// Discord webhook URL.
 	URL string
-	// Username to be shown for the message.
+	// Username to be shown in the message.
 	// Leave empty to use default as set in the Discord.
 	Username string
 	// Title for different levels, must have exact 5 elements in the order of
@@ -74,7 +76,7 @@ type discordLogger struct {
 	client *http.Client
 }
 
-func (_ *discordLogger) Mode() Mode {
+func (*discordLogger) Mode() Mode {
 	return ModeDiscord
 }
 
@@ -115,7 +117,7 @@ func (l *discordLogger) postMessage(r io.Reader) (int64, error) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == 429 {
+	if resp.StatusCode == http.StatusTooManyRequests {
 		rateLimitMsg := struct {
 			RetryAfter int64 `json:"retry_after"`
 		}{}
@@ -142,7 +144,8 @@ func (l *discordLogger) Write(m Messager) error {
 	}
 
 	const retryTimes = 3
-	// Due to discord limit, try at most x times with respect to "retry_after" parameter.
+
+	// Try at most X times with respect to "retry_after" parameter.
 	for i := 1; i <= retryTimes; i++ {
 		retryAfter, err := l.postMessage(bytes.NewReader([]byte(payload)))
 		if err != nil {
