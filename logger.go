@@ -53,7 +53,7 @@ func (l *cancelableLogger) error(err error) {
 		return
 	}
 
-	errLogger.Print(errSprintf("clog [%s]: %v\n", l.Mode(), err))
+	errLogger.Print(errSprintf("[clog] [%s]: %v", l.Mode(), err))
 }
 
 type manager struct {
@@ -79,6 +79,10 @@ func (m *manager) write(level Level, skip int, format string, v ...interface{}) 
 		}
 
 		mgr.loggers[i].msgChan <- msg
+	}
+
+	if msg == nil {
+		errLogger.Print(errSprintf("[clog] no logger is available"))
 	}
 }
 
