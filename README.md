@@ -10,150 +10,221 @@ This package supports multiple loggers across different levels of logging. It us
 
 ## Installation
 
-To use a tagged revision:
+The minimum requirement of Go is **1.11**.
 
 	go get unknwon.dev/clog/v2
     
 Please apply `-u` flag to update in the future.
 
-### Testing
-
-If you want to test on your machine, please apply `-t` flag:
-
-	go get -t unknwon.dev/clog/v2
-
-Please apply `-u` flag to update in the future.
-
 ## Getting Started
-
-Clog currently has four builtin logger adapters: `console`, `file`, `slack` and `discord`.
 
 It is extremely easy to create one with all default settings. Generally, you would want to create new logger inside `init` or `main` function.
 
+Let's create a logger that prints logs to the console:
+
 ```go
-...
-
 import (
-	"fmt"
-	"os"
-
 	log "unknwon.dev/clog/v2"
 )
 
 func init() {
-	// 0 means logging synchronously
-	err := log.New(log.ModeConsole, 0, log.ConsoleConfig{})
+	err := log.New(log.ModeConsole)
 	if err != nil {
-		fmt.Printf("Fail to create new logger: %v\n", err)
-		os.Exit(1)
+		panic("unable to create new logger: " + err.Error())
 	}
+}
 
-	log.Trace("Hello %s!", "Clog")
-	// Output: Hello Clog!
+func main() {
+	log.Trace("Hello %s!", "World") // YYYY/MM/DD 12:34:56 [TRACE] Hello World!
+	log.Info("Hello %s!", "World")  // YYYY/MM/DD 12:34:56 [ INFO] Hello World!
+	log.Warn("Hello %s!", "World")  // YYYY/MM/DD 12:34:56 [ WARN] Hello World!
 
-	log.Info("Hello %s!", "Clog")
-	log.Warn("Hello %s!", "Clog")
-	...
-	
 	// Graceful stopping all loggers before exiting the program.
 	log.Stop()
 }
-
-...
 ```
 
-The above code is equivalent to the follow settings:
+The code inside `init` function is equivalent to the following:
 
 ```go
-...
+func init() {
 	err := log.New(log.ModeConsole, 0, log.ConsoleConfig{
-		Level:      log.LevelTrace, // Record all logs
+		Level: log.LevelTrace,
 	})
-...
+	if err != nil {
+		panic("unable to create new logger: " + err.Error())
+	}
+}
 ```
 
-In production, you may want to make log less verbose and asynchronous:
+- The `0` is an integer type so it is used as underlying buffer size. In this case, `0` creates synchronized logger (call hangs until write is finished).
+- Any non-integer type is used as the config object, in this case `ConsoleConfig` is the respective config object for the console logger.
+- The `LevelTrace` used here is the lowest logging level, meaning prints every log to the console. All levels from lowest to highest are: `LevelTrace`, `LevelInfo`, `LevelWarn`, `LevelError`, `LevelFatal`, each of has at least one repective function, e.g. `log.Trace`, `log.Info`, `log.Warn`, `log.Error` and `log.Fatal`.
+
+In production, you may want to make log less verbose and be asynchronous:
 
 ```go
-...
-	// The buffer size mainly depends on how many logs will be produced at the same time,
-	// 100 is a good default.
+func init() {
+	// The buffer size mainly depends on how many logs will be produced at the same time, 100 is a good default.
 	err := log.New(log.ModeConsole, 100, log.ConsoleConfig{
-		// Logs under Info level (in this case Trace) will be discarded.
 		Level:      log.LevelInfo,
 	})
-...
+	if err != nil {
+		panic("unable to create new logger: " + err.Error())
+	}
+}
 ```
 
-Console logger comes with color output, but for non-colorable destination, the color output will be disabled automatically.
+- When you set level to be `LevelInfo`, calls to the `log.Trace` will be simply noop.
+- The console logger comes with color output, but for non-colorable destination, the color output will be disabled automatically.
 
-### Error Location
+Other builtin loggers are file (`log.ModeFile`), Slack (`log.ModeSlack`) and Discord (`log.Discord`), see later in the documentation for usage details.
 
-When using `log.Error` and `log.Fatal` functions, the caller location is printed along with the message. 
+### Caller Location
+
+When using `log.Error` and `log.Fatal` functions, the caller location is written along with logs. 
 
 ```go
-...
-	log.Error("So bad... %v", err)
-	// Output: 2017/02/09 01:06:16 [ERROR] [...uban-builder/main.go:64 main()] ...
-	log.Fatal("Boom! %v", err)
-	// Output: 2017/02/09 01:06:16 [FATAL] [...uban-builder/main.go:64 main()] ...
-...
+func main() {
+	log.Error("So bad... %v", err) // YYYY/MM/DD 12:34:56 [ERROR] [...er/main.go:64 main()] ...
+	log.Fatal("Boom! %v", err)     // YYYY/MM/DD 12:34:56 [FATAL] [...er/main.go:64 main()] ...
+
+	// ...
+}
 ```
 
-Calling `log.Fatal` will exit the program.
-
-If you want to have different skip depth than the default, you can use `log.ErrorDepth` or `log.FatalDepth`.
+- Calling `log.Fatal` will exit the program.
+- If you want to have different skip depth than the default, use `log.ErrorDepth` or `log.FatalDepth`.
 
 ### Clean Exit
 
-You should always call `log.Stop()` to wait until all messages are processed before program exits.
+You should always call `log.Stop()` to wait until all logs are processed before program exits.
 
-## File
+## Builtin Loggers
 
-File logger is more complex than console, and it has ability to rotate:
+### File Logger
+
+File logger is the single most powerful builtin logger, it has the ability to rotate based on file size, line, and date:
 
 ```go
-...
+func init() {
 	err := log.New(log.ModeFile, 100, log.FileConfig{
-		Level:              log.LevelInfo, 
+		Level:              log.LevelInfo,
 		Filename:           "clog.log",  
 		FileRotationConfig: log.FileRotationConfig {
 			Rotate: true,
 			Daily:  true,
 		},
 	})
-...
+	if err != nil {
+		panic("unable to create new logger: " + err.Error())
+	}
+}
 ```
 
-## Slack
+In case you have some other packages that write to a file, and you want to take advatange of this file rotation feature. You can do so by using the `log.NewFileWriter` function. It acts like a standard `io.Writer`.
+
+```go
+func init() {
+	w, err := log.NewFileWriter("filename", log.FileRotationConfig{
+		Rotate: true,
+		Daily:  true,
+	})
+	if err != nil {
+		panic("unable to create new logger: " + err.Error())
+	}
+}
+```
+
+### Slack Logger
 
 Slack logger is also supported in a simple way:
 
 ```go
-...
+func init() {
 	err := log.New(log.ModeSlack, 100, log.SlackConfig{
-		Level:              log.LevelInfo, 
-		URL:                "https://url-to-slack-webhook",  
+		Level: log.LevelInfo,
+		URL:   "https://url-to-slack-webhook",
 	})
-...
+	if err != nil {
+		panic("unable to create new logger: " + err.Error())
+	}
+}
 ```
 
 This logger also works for [Discord Slack](https://discordapp.com/developers/docs/resources/webhook#execute-slackcompatible-webhook) endpoint.
 
-## Discord
+### Discord Logger
 
 Discord logger is supported in rich format via [Embed Object](https://discordapp.com/developers/docs/resources/channel#embed-object):
 
 ```go
-...
+func init() {
 	err := log.New(log.ModeDiscord, 100, log.DiscordConfig{
-		Level:              log.LevelInfo, 
-		URL:                "https://url-to-discord-webhook",  
+		Level: log.LevelInfo,
+		URL:   "https://url-to-discord-webhook",
 	})
-...
+	if err != nil {
+		panic("unable to create new logger: " + err.Error())
+	}
+}
 ```
 
-This logger also retries automatically if hits rate limit after `retry_after`.
+This logger automatically retries up to 3 times if hits rate limit with respect to `retry_after`.
+
+## Build Your Own Logger
+
+You can implement your own logger and all the concurrency stuff are handled automatically!
+
+Here is an example which sends all logs to a channel, we call it `chanLogger` here:
+
+```go
+import log "unknwon.dev/clog/v2"
+
+const modeChannel log.Mode = "channel"
+
+type chanConfig struct {
+	c chan string
+}
+
+var _ log.Logger = (*chanLogger)(nil)
+
+type chanLogger struct {
+	level log.Level
+	c     chan string
+}
+
+func (*chanLogger) Mode() log.Mode     { return modeChannel }
+func (l *chanLogger) Level() log.Level { return l.level }
+
+func (l *chanLogger) Write(m Messager) error {
+	l.c <- m.String()
+	return nil
+}
+
+func init() {
+	log.NewRegister(modeChannel, func(v interface{}) (log.Logger, error) {
+		if v == nil {
+			v = chanConfig{}
+		}
+
+		cfg, ok := v.(chanConfig)
+		if !ok {
+			return nil, fmt.Errorf("invalid config object: want %T got %T", chanConfig{}, v)
+		}
+
+		if cfg.c == nil {
+			return nil, errors.New("channel is nil")
+		}
+
+		return &chanLogger{
+			c: cfg.c,
+		}, nil
+	})
+}
+```
+
+Have fun!
 
 ## Credits
 
