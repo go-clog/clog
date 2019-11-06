@@ -4,7 +4,7 @@ go:
   - 1.11.x
   - 1.12.x
   - 1.13.x
-go_import_path: unknwon.dev/clog.v2
+go_import_path: unknwon.dev/clog/v2
 
 env:
   - GO111MODULE=on

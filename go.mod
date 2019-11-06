@@ -1,4 +1,4 @@
-module unknwon.dev/clog.v2
+module unknwon.dev/clog/v2
 
 go 1.12
 
