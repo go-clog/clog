@@ -20,6 +20,10 @@ func Test_ModeFile(t *testing.T) {
 		wantErr   error
 	}{
 		{
+			name:    "nil config",
+			wantErr: nil,
+		},
+		{
 			name: "valid config",
 			config: FileConfig{
 				Level:    LevelInfo,

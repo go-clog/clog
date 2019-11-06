@@ -107,6 +107,10 @@ func (l *slackLogger) Write(m Messager) error {
 
 func init() {
 	NewRegister(ModeSlack, func(v interface{}) (Logger, error) {
+		if v == nil {
+			v = SlackConfig{}
+		}
+
 		cfg, ok := v.(SlackConfig)
 		if !ok {
 			return nil, fmt.Errorf("invalid config object: want %T got %T", SlackConfig{}, v)

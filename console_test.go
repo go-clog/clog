@@ -17,6 +17,10 @@ func Test_ModeConsole(t *testing.T) {
 		wantErr   error
 	}{
 		{
+			name:    "nil config",
+			wantErr: nil,
+		},
+		{
 			name: "valid config",
 			config: ConsoleConfig{
 				Level: LevelInfo,

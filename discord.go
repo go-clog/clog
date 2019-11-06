@@ -165,6 +165,10 @@ func (l *discordLogger) Write(m Messager) error {
 
 func init() {
 	NewRegister(ModeDiscord, func(v interface{}) (Logger, error) {
+		if v == nil {
+			v = DiscordConfig{}
+		}
+
 		cfg, ok := v.(DiscordConfig)
 		if !ok {
 			return nil, fmt.Errorf("invalid config object: want %T got %T", DiscordConfig{}, v)

@@ -14,4 +14,5 @@ coverage:
 
 clean:
 	go clean
+	rm -f clog.log
 	rm -f coverage.out

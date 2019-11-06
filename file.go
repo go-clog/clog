@@ -236,6 +236,12 @@ func (l *fileLogger) init() error {
 
 func init() {
 	NewRegister(ModeFile, func(v interface{}) (Logger, error) {
+		if v == nil {
+			v = FileConfig{
+				Filename: "clog.log",
+			}
+		}
+
 		cfg, ok := v.(FileConfig)
 		if !ok {
 			return nil, fmt.Errorf("invalid config object: want %T got %T", FileConfig{}, v)

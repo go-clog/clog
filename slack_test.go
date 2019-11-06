@@ -20,6 +20,10 @@ func Test_ModeSlack(t *testing.T) {
 		wantErr   error
 	}{
 		{
+			name:    "nil config",
+			wantErr: errors.New("initialize logger: empty URL"),
+		},
+		{
 			name: "valid config",
 			config: SlackConfig{
 				Level:  LevelInfo,

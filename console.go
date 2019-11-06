@@ -47,6 +47,10 @@ func (l *consoleLogger) Write(m Messager) error {
 
 func init() {
 	NewRegister(ModeConsole, func(v interface{}) (Logger, error) {
+		if v == nil {
+			v = ConsoleConfig{}
+		}
+
 		cfg, ok := v.(ConsoleConfig)
 		if !ok {
 			return nil, fmt.Errorf("invalid config object: want %T got %T", ConsoleConfig{}, v)
