@@ -89,14 +89,28 @@ func TestNew(t *testing.T) {
 	)
 
 	tests := []struct {
-		name string
-		mode Mode
-		want error
+		name       string
+		mode       Mode
+		bufferSize interface{}
+		want       error
 	}{
 		{
-			name: "success",
-			mode: testModeGood,
-			want: nil,
+			name:       "success",
+			mode:       testModeGood,
+			bufferSize: 1,
+			want:       nil,
+		},
+		{
+			name:       "success",
+			mode:       testModeGood,
+			bufferSize: int32(1),
+			want:       nil,
+		},
+		{
+			name:       "success",
+			mode:       testModeGood,
+			bufferSize: int64(1),
+			want:       nil,
 		},
 		{
 			name: "no register",
@@ -116,7 +130,7 @@ func TestNew(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := New(tt.mode, 10, nil)
+			err := New(tt.mode, tt.bufferSize)
 			assert.Equal(t, tt.want, err)
 		})
 	}
@@ -129,7 +143,7 @@ func TestRemove(t *testing.T) {
 			mode: testMode1,
 		}, nil
 	})
-	assert.Nil(t, New(testMode1, 10, nil))
+	assert.Nil(t, New(testMode1, -1))
 
 	testMode2 := Mode("TestRemove2")
 	NewRegister(testMode2, func(_ interface{}) (Logger, error) {
@@ -137,7 +151,7 @@ func TestRemove(t *testing.T) {
 			mode: testMode2,
 		}, nil
 	})
-	assert.Nil(t, New(testMode2, 10, nil))
+	assert.Nil(t, New(testMode2, -1))
 
 	tests := []struct {
 		name       string

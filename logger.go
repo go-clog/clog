@@ -114,18 +114,42 @@ func init() {
 }
 
 // New initializes and appends a new logger to the managed list.
-// Calling this function multiple times will overwrite previous logger with same mode.
+// Calling this function multiple times will overwrite previous initialized
+// logger with the same mode.
+//
+// Any integer type (i.e. int, int32, int64) will be used as buffer size.
+// Otherwise, the value will be used as config object to the logger.
 //
 // This function is not concurrent safe.
-func New(mode Mode, bufferSize int64, cfg interface{}) error {
+//func New(mode Mode, bufferSize int64, cfg interface{}) error {
+func New(mode Mode, opts ...interface{}) error {
 	r, ok := registers[mode]
 	if !ok {
 		return fmt.Errorf("no register for %q", mode)
 	}
 
+	bufferSize := 0
+	var cfg interface{}
+	for i := range opts {
+		switch opt := opts[i].(type) {
+		case int:
+			bufferSize = opt
+		case int32:
+			bufferSize = int(opt)
+		case int64:
+			bufferSize = int(opt)
+		default:
+			cfg = opt
+		}
+	}
+
 	l, err := r(cfg)
 	if err != nil {
 		return fmt.Errorf("initialize logger: %v", err)
+	}
+
+	if bufferSize < 0 {
+		bufferSize = 0
 	}
 
 	ctx, cancel := context.WithCancel(mgr.ctx)
