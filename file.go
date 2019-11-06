@@ -1,17 +1,3 @@
-// Copyright 2017 Unknwon
-//
-// Licensed under the Apache License, Version 2.0 (the "License"): you may
-// not use this file except in compliance with the License. You may obtain
-// a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-// License for the specific language governing permissions and limitations
-// under the License.
-
 package clog
 
 import (
@@ -26,9 +12,12 @@ import (
 	"time"
 )
 
+// ModeFile is used to indicate file logger.
+const ModeFile Mode = "file"
+
 const (
-	SIMPLE_DATE_FORMAT = "2006-01-02"
-	LOG_PREFIX_LENGTH  = len("2017/02/06 21:20:08 ")
+	simpleDateFormat = "2006-01-02"
+	logPrefixLength  = len("2017/02/06 21:20:08 ")
 )
 
 // FileRotationConfig represents rotation related configurations for file mode logger.
@@ -46,79 +35,66 @@ type FileRotationConfig struct {
 	MaxDays int64
 }
 
+// FileConfig is the config object for the file logger.
 type FileConfig struct {
 	// Minimum level of messages to be processed.
-	Level LEVEL
-	// Buffer size defines how many messages can be queued before hangs.
-	BufferSize int64
-	// File name to outout messages.
+	Level Level
+	// File name to output messages.
 	Filename string
 	// Rotation related configurations.
 	FileRotationConfig
 }
 
-type file struct {
-	// Indicates whether object is been used in standalone mode.
+var _ Logger = (*fileLogger)(nil)
+
+type fileLogger struct {
+	// Indicates whether it is being used as standalone logger.
+	// It is only true when the logger is created by NewFileWriter.
 	standalone bool
 
-	*log.Logger
-	Adapter
+	level Level
 
+	filename       string
+	rotationConfig FileRotationConfig
+
+	// Rotation metadata
 	file         *os.File
-	filename     string
 	openDay      int
 	currentSize  int64
 	currentLines int64
-	rotate       FileRotationConfig
+
+	*log.Logger
 }
 
-func newFile() Logger {
-	return &file{
-		Adapter: Adapter{
-			quitChan: make(chan struct{}),
-		},
-	}
+func (*fileLogger) Mode() Mode {
+	return ModeFile
 }
 
-// NewFileWriter returns an io.Writer for synchronized file logger in standalone mode.
-func NewFileWriter(filename string, cfg FileRotationConfig) (io.Writer, error) {
-	f := &file{
-		standalone: true,
-	}
-	if err := f.Init(FileConfig{
-		Filename:           filename,
-		FileRotationConfig: cfg,
-	}); err != nil {
-		return nil, err
-	}
-
-	return f, nil
+func (l *fileLogger) Level() Level {
+	return l.level
 }
-
-func (f *file) Level() LEVEL { return f.level }
 
 var newLineBytes = []byte("\n")
 
-func (f *file) initFile() (err error) {
-	f.file, err = os.OpenFile(f.filename, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0660)
+func (l *fileLogger) initFile() (err error) {
+	l.file, err = os.OpenFile(l.filename, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0660)
 	if err != nil {
-		return fmt.Errorf("OpenFile '%s': %v", f.filename, err)
+		return fmt.Errorf("open file %q: %v", l.filename, err)
 	}
 
-	f.Logger = log.New(f.file, "", log.Ldate|log.Ltime)
+	l.Logger = log.New(l.file, "", log.Ldate|log.Ltime)
 	return nil
 }
 
-// isExist checks whether a file or directory exists.
-// It returns false when the file or directory does not exist.
+// isExist returns true if the file or directory exists.
 func isExist(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil || os.IsExist(err)
 }
 
-// rotateFilename returns next available rotate filename with given date.
-func (f *file) rotateFilename(date string) string {
-	filename := fmt.Sprintf("%s.%s", f.filename, date)
+// rotateFilename returns next available rotate filename in given date.
+func rotateFilename(filename, date string) string {
+	filename = fmt.Sprintf("%s.%s", filename, date)
 	if !isExist(filename) {
 		return filename
 	}
@@ -131,110 +107,79 @@ func (f *file) rotateFilename(date string) string {
 		}
 	}
 
-	panic("too many log files for yesterday")
+	panic("too many log files for yesterday, already reached 999")
 }
 
-func (f *file) deleteOutdatedFiles() {
-	filepath.Walk(filepath.Dir(f.filename), func(path string, info os.FileInfo, err error) error {
-		if !info.IsDir() &&
-			info.ModTime().Before(time.Now().Add(-24*time.Hour*time.Duration(f.rotate.MaxDays))) &&
-			strings.HasPrefix(filepath.Base(path), filepath.Base(f.filename)) {
-			os.Remove(path)
+func (l *fileLogger) deleteOutdatedFiles() error {
+	return filepath.Walk(filepath.Dir(l.filename), func(path string, fi os.FileInfo, _ error) error {
+		if !fi.IsDir() &&
+			fi.ModTime().Before(time.Now().Add(-24*time.Hour*time.Duration(l.rotationConfig.MaxDays))) &&
+			strings.HasPrefix(filepath.Base(path), filepath.Base(l.filename)) {
+			return os.Remove(path)
 		}
 		return nil
 	})
 }
 
-func (f *file) initRotate() error {
+func (l *fileLogger) initRotation() error {
 	// Gather basic file info for rotation.
-	fi, err := f.file.Stat()
+	fi, err := l.file.Stat()
 	if err != nil {
-		return fmt.Errorf("Stat: %v", err)
+		return fmt.Errorf("stat: %v", err)
 	}
 
-	f.currentSize = fi.Size()
+	l.currentSize = fi.Size()
 
 	// If there is any content in the file, count the number of lines.
-	if f.rotate.MaxLines > 0 && f.currentSize > 0 {
-		data, err := ioutil.ReadFile(f.filename)
+	if l.rotationConfig.MaxLines > 0 && l.currentSize > 0 {
+		data, err := ioutil.ReadFile(l.filename)
 		if err != nil {
-			return fmt.Errorf("ReadFile '%s': %v", f.filename, err)
+			return fmt.Errorf("read file %q: %v", l.filename, err)
 		}
 
-		f.currentLines = int64(bytes.Count(data, newLineBytes)) + 1
+		l.currentLines = int64(bytes.Count(data, newLineBytes)) + 1
 	}
 
-	if f.rotate.Daily {
+	if l.rotationConfig.Daily {
 		now := time.Now()
-		f.openDay = now.Day()
+		l.openDay = now.Day()
 
 		lastWriteTime := fi.ModTime()
 		if lastWriteTime.Year() != now.Year() ||
 			lastWriteTime.Month() != now.Month() ||
 			lastWriteTime.Day() != now.Day() {
 
-			if err = f.file.Close(); err != nil {
-				return fmt.Errorf("Close: %v", err)
+			if err = l.file.Close(); err != nil {
+				return fmt.Errorf("close current file: %v", err)
 			}
-			if err = os.Rename(f.filename, f.rotateFilename(lastWriteTime.Format(SIMPLE_DATE_FORMAT))); err != nil {
-				return fmt.Errorf("Rename: %v", err)
+			if err = os.Rename(l.filename, rotateFilename(l.filename, lastWriteTime.Format(simpleDateFormat))); err != nil {
+				return fmt.Errorf("rename rotate file: %v", err)
 			}
 
-			if err = f.initFile(); err != nil {
-				return fmt.Errorf("initFile: %v", err)
+			if err = l.initFile(); err != nil {
+				return fmt.Errorf("init file: %v", err)
 			}
 		}
 	}
 
-	if f.rotate.MaxDays > 0 {
-		f.deleteOutdatedFiles()
+	if l.rotationConfig.MaxDays > 0 {
+		if err = l.deleteOutdatedFiles(); err != nil {
+			return fmt.Errorf("delete outdated files: %v", err)
+		}
 	}
 	return nil
 }
 
-func (f *file) Init(v interface{}) (err error) {
-	cfg, ok := v.(FileConfig)
-	if !ok {
-		return ErrConfigObject{"FileConfig", v}
+func (l *fileLogger) write(m Messager) (int, error) {
+	l.Logger.Print(m.String())
+
+	bytesWrote := len(m.String())
+	if !l.standalone {
+		bytesWrote += logPrefixLength
 	}
-
-	if !isValidLevel(cfg.Level) {
-		return ErrInvalidLevel{}
-	}
-	f.level = cfg.Level
-
-	f.filename = cfg.Filename
-	os.MkdirAll(filepath.Dir(f.filename), os.ModePerm)
-	if err = f.initFile(); err != nil {
-		return fmt.Errorf("initFile: %v", err)
-	}
-
-	f.rotate = cfg.FileRotationConfig
-	if f.rotate.Rotate {
-		f.initRotate()
-	}
-
-	if !f.standalone {
-		f.msgChan = make(chan *Message, cfg.BufferSize)
-	}
-	return nil
-}
-
-func (f *file) ExchangeChans(errorChan chan<- error) chan *Message {
-	f.errorChan = errorChan
-	return f.msgChan
-}
-
-func (f *file) write(msg *Message) int {
-	f.Logger.Print(msg.Body)
-
-	bytesWrote := len(msg.Body)
-	if !f.standalone {
-		bytesWrote += LOG_PREFIX_LENGTH
-	}
-	if f.rotate.Rotate {
-		f.currentSize += int64(bytesWrote)
-		f.currentLines++ // TODO: should I care if log message itself contains new lines?
+	if l.rotationConfig.Rotate {
+		l.currentSize += int64(bytesWrote)
+		l.currentLines += int64(strings.Count(m.String(), "\n")) + 1
 
 		var (
 			needsRotate = false
@@ -242,74 +187,97 @@ func (f *file) write(msg *Message) int {
 		)
 
 		now := time.Now()
-		if f.rotate.Daily && now.Day() != f.openDay {
+		if l.rotationConfig.Daily && now.Day() != l.openDay {
 			needsRotate = true
 			rotateDate = now.Add(-24 * time.Hour)
 
-		} else if (f.rotate.MaxSize > 0 && f.currentSize >= f.rotate.MaxSize) ||
-			(f.rotate.MaxLines > 0 && f.currentLines >= f.rotate.MaxLines) {
+		} else if (l.rotationConfig.MaxSize > 0 && l.currentSize >= l.rotationConfig.MaxSize) ||
+			(l.rotationConfig.MaxLines > 0 && l.currentLines >= l.rotationConfig.MaxLines) {
 			needsRotate = true
 			rotateDate = now
 		}
 
 		if needsRotate {
-			f.file.Close()
-			if err := os.Rename(f.filename, f.rotateFilename(rotateDate.Format(SIMPLE_DATE_FORMAT))); err != nil {
-				f.errorChan <- fmt.Errorf("fail to rename rotate file '%s': %v", f.filename, err)
+			_ = l.file.Close()
+			if err := os.Rename(l.filename, rotateFilename(l.filename, rotateDate.Format(simpleDateFormat))); err != nil {
+				return bytesWrote, fmt.Errorf("rename rotated file %q: %v", l.filename, err)
 			}
 
-			if err := f.initFile(); err != nil {
-				f.errorChan <- fmt.Errorf("fail to init log file '%s': %v", f.filename, err)
+			if err := l.initFile(); err != nil {
+				return bytesWrote, fmt.Errorf("init file %q: %v", l.filename, err)
 			}
 
-			f.openDay = now.Day()
-			f.currentSize = 0
-			f.currentLines = 0
+			l.openDay = now.Day()
+			l.currentSize = 0
+			l.currentLines = 0
 		}
 	}
-	return bytesWrote
+	return bytesWrote, nil
 }
 
-var _ io.Writer = new(file)
-
-// Write implements method of io.Writer interface.
-func (f *file) Write(p []byte) (int, error) {
-	return f.write(&Message{
-		Body: string(p),
-	}), nil
+func (l *fileLogger) Write(m Messager) error {
+	_, err := l.write(m)
+	return err
 }
 
-func (f *file) Start() {
-LOOP:
-	for {
-		select {
-		case msg := <-f.msgChan:
-			f.write(msg)
-		case <-f.quitChan:
-			break LOOP
-		}
+func (l *fileLogger) init() error {
+	_ = os.MkdirAll(filepath.Dir(l.filename), os.ModePerm)
+	if err := l.initFile(); err != nil {
+		return fmt.Errorf("init file %q: %v", l.filename, err)
 	}
 
-	for {
-		if len(f.msgChan) == 0 {
-			break
+	if l.rotationConfig.Rotate {
+		if err := l.initRotation(); err != nil {
+			return fmt.Errorf("init rotation: %v", err)
 		}
-
-		f.write(<-f.msgChan)
 	}
-	f.quitChan <- struct{}{} // Notify the cleanup is done.
-}
-
-func (f *file) Destroy() {
-	f.quitChan <- struct{}{}
-	<-f.quitChan
-
-	close(f.msgChan)
-	close(f.quitChan)
-
-	f.file.Close()
+	return nil
 }
 
 func init() {
-	Register(FILE, newFile)
+	NewRegister(ModeFile, func(v interface{}) (Logger, error) {
+		cfg, ok := v.(FileConfig)
+		if !ok {
+			return nil, fmt.Errorf("invalid config object: want %T got %T", FileConfig{}, v)
+		}
+
+		l := &fileLogger{
+			level:          cfg.Level,
+			filename:       cfg.Filename,
+			rotationConfig: cfg.FileRotationConfig,
+		}
+
+		if err := l.init(); err != nil {
+			return nil, err
+		}
+
+		return l, nil
+	})
+}
+
+var _ io.Writer = (*fileWriter)(nil)
+
+type fileWriter struct {
+	*fileLogger
+}
+
+// NewFileWriter returns an io.Writer for synchronized file logger.
+func NewFileWriter(filename string, cfg FileRotationConfig) (io.Writer, error) {
+	f := &fileLogger{
+		standalone:     true,
+		filename:       filename,
+		rotationConfig: cfg,
+	}
+	if err := f.init(); err != nil {
+		return nil, fmt.Errorf("init: %v", err)
+	}
+
+	return &fileWriter{f}, nil
+}
+
+// Write implements method of io.Writer interface.
+func (w *fileWriter) Write(p []byte) (int, error) {
+	return w.write(&message{
+		body: string(p),
+	})
 }

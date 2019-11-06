@@ -1,69 +1,68 @@
-// Copyright 2017 Unknwon
-//
-// Licensed under the Apache License, Version 2.0 (the "License"): you may
-// not use this file except in compliance with the License. You may obtain
-// a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-// License for the specific language governing permissions and limitations
-// under the License.
-
 package clog
 
 import (
+	"errors"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"testing"
 
-	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/assert"
 )
 
-func Test_file_Init(t *testing.T) {
-	Convey("Init file logger", t, func() {
-		Convey("With mismatched config object", func() {
-			err := New(FILE, struct{}{})
-			So(err, ShouldNotBeNil)
-			_, ok := err.(ErrConfigObject)
-			So(ok, ShouldBeTrue)
+func Test_ModeFile(t *testing.T) {
+	defer Remove(ModeFile)
+
+	tests := []struct {
+		name      string
+		config    interface{}
+		wantLevel Level
+		wantErr   error
+	}{
+		{
+			name: "valid config",
+			config: FileConfig{
+				Level:    LevelInfo,
+				Filename: filepath.Join(os.TempDir(), "Test_ModeFile"),
+			},
+			wantErr: nil,
+		},
+		{
+			name:    "invalid config",
+			config:  "random things",
+			wantErr: errors.New("initialize logger: invalid config object: want clog.FileConfig got string"),
+		},
+		{
+			name: "invalid filename",
+			config: FileConfig{
+				Level: LevelInfo,
+			},
+			wantErr: errors.New(`initialize logger: init file "": open file "": open : no such file or directory`),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.wantErr, New(ModeFile, 10, tt.config))
 		})
+	}
 
-		Convey("With valid config object", func() {
-			So(New(FILE, FileConfig{
-				Filename: "test/test.log",
-			}), ShouldBeNil)
-
-			Convey("Incorrect level", func() {
-				err := New(FILE, FileConfig{
-					Level: LEVEL(-1),
-				})
-				So(err, ShouldNotBeNil)
-				_, ok := err.(ErrInvalidLevel)
-				So(ok, ShouldBeTrue)
-			})
-
-			Convey("Empty file name", func() {
-				err := New(FILE, FileConfig{})
-				So(err, ShouldNotBeNil)
-				So(err.Error(), ShouldEqual, "initFile: OpenFile '': open : no such file or directory")
-			})
-		})
-	})
+	assert.Equal(t, 1, mgr.len())
+	assert.Equal(t, ModeFile, mgr.loggers[0].Mode())
+	assert.Equal(t, LevelInfo, mgr.loggers[0].Level())
 }
 
-func Test_file_rotateFilename(t *testing.T) {
-	Convey("Get rotate filename", t, func() {
-		f := &file{
-			filename: "test/test.log",
-		}
-		os.Remove("test/test.log.2017-03-05")
-		So(f.rotateFilename("2017-03-05"), ShouldEqual, "test/test.log.2017-03-05")
+func Test_rotateFilename(t *testing.T) {
+	_ = os.MkdirAll("test", os.ModePerm)
+	defer os.RemoveAll("test")
 
-		// Pretend one log file already exists
-		ioutil.WriteFile("test/test.log.2017-03-05", []byte(""), os.ModePerm)
-		So(f.rotateFilename("2017-03-05"), ShouldEqual, "test/test.log.2017-03-05.001")
-	})
+	filename := rotateFilename("test/Test_rotateFilename.log", "2017-03-05")
+	assert.Equal(t, "test/Test_rotateFilename.log.2017-03-05", filename)
+	assert.Nil(t, ioutil.WriteFile(filename, []byte(""), os.ModePerm))
+
+	filename = rotateFilename("test/Test_rotateFilename.log", "2017-03-05")
+	assert.Equal(t, "test/Test_rotateFilename.log.2017-03-05.001", filename)
+	assert.Nil(t, ioutil.WriteFile(filename, []byte(""), os.ModePerm))
+
+	filename = rotateFilename("test/Test_rotateFilename.log", "2017-03-05")
+	assert.Equal(t, "test/Test_rotateFilename.log.2017-03-05.002", filename)
 }

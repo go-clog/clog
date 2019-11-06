@@ -1,17 +1,3 @@
-// Copyright 2017 Unknwon
-//
-// Licensed under the Apache License, Version 2.0 (the "License"): you may
-// not use this file except in compliance with the License. You may obtain
-// a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-// License for the specific language governing permissions and limitations
-// under the License.
-
 package clog
 
 import (
@@ -19,9 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 )
+
+// ModeSlack is used to indicate Slack logger.
+const ModeSlack Mode = "slack"
 
 type slackAttachment struct {
 	Text  string `json:"text"`
@@ -40,62 +30,41 @@ var slackColors = []string{
 	"#ff0200", // Fatal
 }
 
+// SlackConfig is the config object for the Slack logger.
 type SlackConfig struct {
-	// Minimum level of messages to be processed.
-	Level LEVEL
-	// Buffer size defines how many messages can be queued before hangs.
-	BufferSize int64
+	// Minimum logging level of messages to be processed.
+	Level Level
 	// Slack webhook URL.
 	URL string
+	// Colors for different levels, must have exact 5 elements in the order of
+	// Trace, Info, Warn, Error, and Fatal.
+	Colors []string
 }
 
-type slack struct {
-	Adapter
+var _ Logger = (*slackLogger)(nil)
 
-	url string
+type slackLogger struct {
+	level  Level
+	url    string
+	colors []string
+
+	client *http.Client
 }
 
-func newSlack() Logger {
-	return &slack{
-		Adapter: Adapter{
-			quitChan: make(chan struct{}),
-		},
-	}
+func (*slackLogger) Mode() Mode {
+	return ModeSlack
 }
 
-func (s *slack) Level() LEVEL { return s.level }
-
-func (s *slack) Init(v interface{}) error {
-	cfg, ok := v.(SlackConfig)
-	if !ok {
-		return ErrConfigObject{"SlackConfig", v}
-	}
-
-	if !isValidLevel(cfg.Level) {
-		return ErrInvalidLevel{}
-	}
-	s.level = cfg.Level
-
-	if len(cfg.URL) == 0 {
-		return errors.New("URL cannot be empty")
-	}
-	s.url = cfg.URL
-
-	s.msgChan = make(chan *Message, cfg.BufferSize)
-	return nil
+func (l *slackLogger) Level() Level {
+	return l.level
 }
 
-func (s *slack) ExchangeChans(errorChan chan<- error) chan *Message {
-	s.errorChan = errorChan
-	return s.msgChan
-}
-
-func buildSlackPayload(msg *Message) (string, error) {
+func (l *slackLogger) buildPayload(m Messager) (string, error) {
 	payload := slackPayload{
 		Attachments: []slackAttachment{
 			{
-				Text:  msg.Body,
-				Color: slackColors[msg.Level],
+				Text:  m.String(),
+				Color: l.colors[m.Level()],
 			},
 		},
 	}
@@ -106,55 +75,60 @@ func buildSlackPayload(msg *Message) (string, error) {
 	return string(p), nil
 }
 
-func (s *slack) write(msg *Message) {
-	payload, err := buildSlackPayload(msg)
+func (l *slackLogger) postMessage(r io.Reader) error {
+	resp, err := l.client.Post(l.url, "application/json", r)
 	if err != nil {
-		s.errorChan <- fmt.Errorf("slack: buildSlackPayload: %v", err)
-		return
-	}
-
-	resp, err := http.Post(s.url, "application/json", bytes.NewReader([]byte(payload)))
-	if err != nil {
-		s.errorChan <- fmt.Errorf("slack: %v", err)
-		return
+		return fmt.Errorf("HTTP request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode/100 != 2 {
-		data, _ := ioutil.ReadAll(resp.Body)
-		s.errorChan <- fmt.Errorf("slack: %s", data)
+		data, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("read HTTP response body: %v", err)
+		}
+		return fmt.Errorf("non-success response status code %d with body: %s", resp.StatusCode, data)
 	}
+	return nil
 }
 
-func (s *slack) Start() {
-LOOP:
-	for {
-		select {
-		case msg := <-s.msgChan:
-			s.write(msg)
-		case <-s.quitChan:
-			break LOOP
-		}
+func (l *slackLogger) Write(m Messager) error {
+	payload, err := l.buildPayload(m)
+	if err != nil {
+		return fmt.Errorf("build payload: %v", err)
 	}
 
-	for {
-		if len(s.msgChan) == 0 {
-			break
-		}
-
-		s.write(<-s.msgChan)
+	err = l.postMessage(bytes.NewReader([]byte(payload)))
+	if err != nil {
+		return fmt.Errorf("post message: %v", err)
 	}
-	s.quitChan <- struct{}{} // Notify the cleanup is done.
-}
-
-func (s *slack) Destroy() {
-	s.quitChan <- struct{}{}
-	<-s.quitChan
-
-	close(s.msgChan)
-	close(s.quitChan)
+	return nil
 }
 
 func init() {
-	Register(SLACK, newSlack)
+	NewRegister(ModeSlack, func(v interface{}) (Logger, error) {
+		cfg, ok := v.(SlackConfig)
+		if !ok {
+			return nil, fmt.Errorf("invalid config object: want %T got %T", SlackConfig{}, v)
+		}
+
+		if cfg.URL == "" {
+			return nil, errors.New("empty URL")
+		}
+
+		colors := slackColors
+		if cfg.Colors != nil {
+			if len(cfg.Colors) != 5 {
+				return nil, fmt.Errorf("colors must have exact 5 elements, but got %d", len(cfg.Colors))
+			}
+			colors = cfg.Colors
+		}
+
+		return &slackLogger{
+			level:  cfg.Level,
+			url:    cfg.URL,
+			colors: colors,
+			client: http.DefaultClient,
+		}, nil
+	})
 }

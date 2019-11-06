@@ -1,24 +1,14 @@
-// Copyright 2017 Unknwon
-//
-// Licensed under the Apache License, Version 2.0 (the "License"): you may
-// not use this file except in compliance with the License. You may obtain
-// a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-// License for the specific language governing permissions and limitations
-// under the License.
-
 package clog
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/fatih/color"
 )
+
+// ModeConsole is used to indicate console logger.
+const ModeConsole Mode = "console"
 
 // Console color set for different levels.
 var consoleColors = []func(a ...interface{}) string{
@@ -29,82 +19,42 @@ var consoleColors = []func(a ...interface{}) string{
 	color.New(color.FgHiRed).SprintFunc(),  // Fatal
 }
 
+// ConsoleConfig is the config object for the console logger.
 type ConsoleConfig struct {
-	// Minimum level of messages to be processed.
-	Level LEVEL
-	// Buffer size defines how many messages can be queued before hangs.
-	BufferSize int64
+	// Minimum logging level of messages to be processed.
+	Level Level
 }
 
-type console struct {
+var _ Logger = (*consoleLogger)(nil)
+
+type consoleLogger struct {
+	level Level
 	*log.Logger
-	Adapter
 }
 
-func newConsole() Logger {
-	return &console{
-		Logger: log.New(color.Output, "", log.Ldate|log.Ltime),
-		Adapter: Adapter{
-			quitChan: make(chan struct{}),
-		},
-	}
+func (*consoleLogger) Mode() Mode {
+	return ModeConsole
 }
 
-func (c *console) Level() LEVEL { return c.level }
+func (l *consoleLogger) Level() Level {
+	return l.level
+}
 
-func (c *console) Init(v interface{}) error {
-	cfg, ok := v.(ConsoleConfig)
-	if !ok {
-		return ErrConfigObject{"ConsoleConfig", v}
-	}
-
-	if !isValidLevel(cfg.Level) {
-		return ErrInvalidLevel{}
-	}
-	c.level = cfg.Level
-
-	c.msgChan = make(chan *Message, cfg.BufferSize)
+func (l *consoleLogger) Write(m Messager) error {
+	l.Print(consoleColors[m.Level()](m.String()))
 	return nil
 }
 
-func (c *console) ExchangeChans(errorChan chan<- error) chan *Message {
-	c.errorChan = errorChan
-	return c.msgChan
-}
-
-func (c *console) write(msg *Message) {
-	c.Logger.Print(consoleColors[msg.Level](msg.Body))
-}
-
-func (c *console) Start() {
-LOOP:
-	for {
-		select {
-		case msg := <-c.msgChan:
-			c.write(msg)
-		case <-c.quitChan:
-			break LOOP
-		}
-	}
-
-	for {
-		if len(c.msgChan) == 0 {
-			break
-		}
-
-		c.write(<-c.msgChan)
-	}
-	c.quitChan <- struct{}{} // Notify the cleanup is done.
-}
-
-func (c *console) Destroy() {
-	c.quitChan <- struct{}{}
-	<-c.quitChan
-
-	close(c.msgChan)
-	close(c.quitChan)
-}
-
 func init() {
-	Register(CONSOLE, newConsole)
+	NewRegister(ModeConsole, func(v interface{}) (Logger, error) {
+		cfg, ok := v.(ConsoleConfig)
+		if !ok {
+			return nil, fmt.Errorf("invalid config object: want %T got %T", ConsoleConfig{}, v)
+		}
+
+		return &consoleLogger{
+			level:  cfg.Level,
+			Logger: log.New(color.Output, "", log.Ldate|log.Ltime),
+		}, nil
+	})
 }

@@ -1,141 +1,199 @@
-// Copyright 2017 Unknwon
-//
-// Licensed under the Apache License, Version 2.0 (the "License"): you may
-// not use this file except in compliance with the License. You may obtain
-// a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-// License for the specific language governing permissions and limitations
-// under the License.
-
 package clog
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+	"log"
+	"sync/atomic"
 
-// Logger is an interface for a logger adapter with specific mode and level.
-type Logger interface {
-	// Level returns minimum level of given logger.
-	Level() LEVEL
-	// Init accepts a config struct specific for given logger and performs any necessary initialization.
-	Init(interface{}) error
-	// ExchangeChans accepts error channel, and returns message receive channel.
-	ExchangeChans(chan<- error) chan *Message
-	// Start starts message processing.
-	Start()
-	// Destroy releases all resources.
-	Destroy()
-}
-
-// Adapter contains common fields for any logger adapter. This struct should be used as embedded struct.
-type Adapter struct {
-	level     LEVEL
-	msgChan   chan *Message
-	quitChan  chan struct{}
-	errorChan chan<- error
-}
-
-type Factory func() Logger
-
-// factories keeps factory function of registered loggers.
-var factories = map[MODE]Factory{}
-
-func Register(mode MODE, f Factory) {
-	if f == nil {
-		panic("clog: register function is nil")
-	}
-	if factories[mode] != nil {
-		panic("clog: register duplicated mode '" + mode + "'")
-	}
-	factories[mode] = f
-}
-
-type receiver struct {
-	Logger
-	mode    MODE
-	msgChan chan *Message
-}
-
-var (
-	// receivers is a list of loggers with their message channel for broadcasting.
-	receivers []*receiver
-
-	errorChan = make(chan error, 5)
-	quitChan  = make(chan struct{})
+	"github.com/fatih/color"
 )
 
-func init() {
-	// Start background error handling goroutine.
-	go func() {
-		for {
-			select {
-			case err := <-errorChan:
-				fmt.Printf("clog: unable to write message: %v\n", err)
-			case <-quitChan:
-				return
-			}
-		}
-	}()
+// Logger is an interface for a logger with a specific mode and level.
+type Logger interface {
+	// Mode returns the mode of the logger.
+	Mode() Mode
+	// Level returns the minimum logging level of the logger.
+	Level() Level
+	// Write processes a Messager entry.
+	Write(Messager) error
 }
 
-// New initializes and appends a new logger to the receiver list.
+// Register is a factory function taht returns a new logger.
+// It accepts a configuration struct specifically for the logger.
+type Register func(interface{}) (Logger, error)
+
+var registers = map[Mode]Register{}
+
+// NewRegister adds a new factory function as a Register to the global map.
+//
+// This function is not concurrent safe.
+func NewRegister(mode Mode, r Register) {
+	if r == nil {
+		panic("register is nil")
+	}
+	if registers[mode] != nil {
+		panic(fmt.Sprintf("register with mode %q already exists", mode))
+	}
+	registers[mode] = r
+}
+
+type cancelableLogger struct {
+	cancel  context.CancelFunc
+	msgChan chan Messager
+	done    chan struct{}
+	Logger
+}
+
+var errLogger = log.New(color.Output, "", log.Ldate|log.Ltime)
+var errSprintf = color.New(color.FgRed).Sprintf
+
+func (l *cancelableLogger) error(err error) {
+	if err == nil {
+		return
+	}
+
+	errLogger.Print(errSprintf("[clog] [%s]: %v", l.Mode(), err))
+}
+
+type manager struct {
+	state   int64 // 0=stopping, 1=running
+	ctx     context.Context
+	cancel  context.CancelFunc
+	loggers []*cancelableLogger
+}
+
+func (m *manager) len() int {
+	return len(m.loggers)
+}
+
+func (m *manager) write(level Level, skip int, format string, v ...interface{}) {
+	var msg *message
+	for i := range mgr.loggers {
+		if mgr.loggers[i].Level() > level {
+			continue
+		}
+
+		if msg == nil {
+			msg = newMessage(level, skip, format, v...)
+		}
+
+		mgr.loggers[i].msgChan <- msg
+	}
+
+	if msg == nil {
+		errLogger.Print(errSprintf("[clog] no logger is available"))
+	}
+}
+
+func (m *manager) stop() {
+	// Make sure cancellation is only propagated once to prevent deadlock of WaitForStop.
+	if !atomic.CompareAndSwapInt64(&m.state, 1, 0) {
+		return
+	}
+
+	m.cancel()
+	for _, l := range m.loggers {
+		<-l.done
+	}
+}
+
+var mgr *manager
+
+func initManager() {
+	ctx, cancel := context.WithCancel(context.Background())
+	mgr = &manager{
+		state:  1,
+		ctx:    ctx,
+		cancel: cancel,
+	}
+}
+
+func init() {
+	initManager()
+}
+
+// New initializes and appends a new logger to the managed list.
 // Calling this function multiple times will overwrite previous logger with same mode.
-func New(mode MODE, cfg interface{}) error {
-	factory, ok := factories[mode]
+//
+// This function is not concurrent safe.
+func New(mode Mode, bufferSize int64, cfg interface{}) error {
+	r, ok := registers[mode]
 	if !ok {
-		return fmt.Errorf("unknown mode '%s'", mode)
+		return fmt.Errorf("no register for %q", mode)
 	}
 
-	logger := factory()
-	if err := logger.Init(cfg); err != nil {
-		return err
+	l, err := r(cfg)
+	if err != nil {
+		return fmt.Errorf("initialize logger: %v", err)
 	}
-	msgChan := logger.ExchangeChans(errorChan)
 
-	// Check and replace previous logger.
-	hasFound := false
-	for i := range receivers {
-		if receivers[i].mode == mode {
-			hasFound = true
+	ctx, cancel := context.WithCancel(mgr.ctx)
+	cl := &cancelableLogger{
+		cancel:  cancel,
+		msgChan: make(chan Messager, bufferSize),
+		done:    make(chan struct{}),
+		Logger:  l,
+	}
 
-			// Release previous logger.
-			receivers[i].Destroy()
+	// Check and replace previous logger
+	found := false
+	for i, l := range mgr.loggers {
+		if l.Mode() == mode {
+			found = true
 
-			// Update info to new one.
-			receivers[i].Logger = logger
-			receivers[i].msgChan = msgChan
+			// Release previous logger
+			l.cancel()
+			<-l.done
+
+			mgr.loggers[i] = cl
 			break
 		}
 	}
-	if !hasFound {
-		receivers = append(receivers, &receiver{
-			Logger:  logger,
-			mode:    mode,
-			msgChan: msgChan,
-		})
+	if !found {
+		mgr.loggers = append(mgr.loggers, cl)
 	}
 
-	go logger.Start()
+	go func() {
+	loop:
+		for {
+			select {
+			case m := <-cl.msgChan:
+				cl.error(cl.Write(m))
+			case <-ctx.Done():
+				break loop
+			}
+		}
+
+		// Drain the msgChan at best effort
+		for {
+			if len(cl.msgChan) == 0 {
+				break
+			}
+
+			cl.error(cl.Write(<-cl.msgChan))
+		}
+
+		// Notify the cleanup is done
+		cl.done <- struct{}{}
+	}()
 	return nil
 }
 
-// Delete removes logger from the receiver list.
-func Delete(mode MODE) {
-	foundIdx := -1
-	for i := range receivers {
-		if receivers[i].mode == mode {
-			foundIdx = i
-			receivers[i].Destroy()
+// Remove removes a logger with given mode from the managed list.
+//
+// This function is not concurrent safe.
+func Remove(mode Mode) {
+	loggers := mgr.loggers[:0]
+	for _, l := range mgr.loggers {
+		if l.Mode() == mode {
+			go func(l *cancelableLogger) {
+				l.cancel()
+				<-l.done
+			}(l)
+			continue
 		}
+		loggers = append(loggers, l)
 	}
-
-	if foundIdx >= 0 {
-		newList := make([]*receiver, len(receivers)-1)
-		copy(newList, receivers[:foundIdx])
-		copy(newList[foundIdx:], receivers[foundIdx+1:])
-		receivers = newList
-	}
+	mgr.loggers = loggers
 }

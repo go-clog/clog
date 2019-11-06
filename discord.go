@@ -1,17 +1,3 @@
-// Copyright 2018 Unknwon
-//
-// Licensed under the Apache License, Version 2.0 (the "License"): you may
-// not use this file except in compliance with the License. You may obtain
-// a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-// License for the specific language governing permissions and limitations
-// under the License.
-
 package clog
 
 import (
@@ -22,8 +8,12 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"strings"
 	"time"
 )
+
+// ModeDiscord is used to indicate Discord logger.
+const ModeDiscord Mode = "discord"
 
 type (
 	discordEmbed struct {
@@ -41,7 +31,7 @@ type (
 
 var (
 	discordTitles = []string{
-		"Tracing",
+		"Trace",
 		"Information",
 		"Warning",
 		"Error",
@@ -57,70 +47,59 @@ var (
 	}
 )
 
+// DiscordConfig is the config object for the Discord logger.
 type DiscordConfig struct {
-	// Minimum level of messages to be processed.
-	Level LEVEL
-	// Buffer size defines how many messages can be queued before hangs.
-	BufferSize int64
+	// Minimum logging level of messages to be processed.
+	Level Level
 	// Discord webhook URL.
 	URL string
-	// Username to be shown for the message.
+	// Username to be shown in the message.
 	// Leave empty to use default as set in the Discord.
 	Username string
+	// Title for different levels, must have exact 5 elements in the order of
+	// Trace, Info, Warn, Error, and Fatal.
+	Titles []string
+	// Colors for different levels, must have exact 5 elements in the order of
+	// Trace, Info, Warn, Error, and Fatal.
+	Colors []int
 }
 
-type discord struct {
-	Adapter
+var _ Logger = (*discordLogger)(nil)
 
+type discordLogger struct {
+	level    Level
 	url      string
 	username string
+	titles   []string
+	colors   []int
+
+	client *http.Client
 }
 
-func newDiscord() Logger {
-	return &discord{
-		Adapter: Adapter{
-			quitChan: make(chan struct{}),
-		},
-	}
+func (*discordLogger) Mode() Mode {
+	return ModeDiscord
 }
 
-func (d *discord) Level() LEVEL { return d.level }
-
-func (d *discord) Init(v interface{}) error {
-	cfg, ok := v.(DiscordConfig)
-	if !ok {
-		return ErrConfigObject{"DiscordConfig", v}
-	}
-
-	if !isValidLevel(cfg.Level) {
-		return ErrInvalidLevel{}
-	}
-	d.level = cfg.Level
-
-	if len(cfg.URL) == 0 {
-		return errors.New("URL cannot be empty")
-	}
-	d.url = cfg.URL
-	d.username = cfg.Username
-
-	d.msgChan = make(chan *Message, cfg.BufferSize)
-	return nil
+func (l *discordLogger) Level() Level {
+	return l.level
 }
 
-func (d *discord) ExchangeChans(errorChan chan<- error) chan *Message {
-	d.errorChan = errorChan
-	return d.msgChan
-}
+func (l *discordLogger) buildPayload(m Messager) (string, error) {
+	descPrefixLen := strings.Index(m.String(), "] ")
+	if descPrefixLen == -1 {
+		descPrefixLen = 0
+	} else {
+		descPrefixLen += 2
+	}
 
-func buildDiscordPayload(username string, msg *Message) (string, error) {
 	payload := discordPayload{
-		Username: username,
+		Username: l.username,
 		Embeds: []*discordEmbed{
 			{
-				Title:       discordTitles[msg.Level],
-				Description: msg.Body[8:],
+				Title:       l.titles[m.Level()],
+				Description: m.String()[descPrefixLen:],
 				Timestamp:   time.Now().Format(time.RFC3339),
-				Color:       discordColors[msg.Level],
+				Color:       l.colors[m.Level()],
 			},
 		},
 	}
@@ -131,46 +110,46 @@ func buildDiscordPayload(username string, msg *Message) (string, error) {
 	return string(p), nil
 }
 
-type rateLimitMsg struct {
-	RetryAfter int64 `json:"retry_after"`
-}
-
-func (d *discord) postMessage(r io.Reader) (int64, error) {
-	resp, err := http.Post(d.url, "application/json", r)
+func (l *discordLogger) postMessage(r io.Reader) (int64, error) {
+	resp, err := l.client.Post(l.url, "application/json", r)
 	if err != nil {
-		return -1, fmt.Errorf("HTTP Post: %v", err)
+		return -1, fmt.Errorf("HTTP request: %v", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == 429 {
-		rlMsg := &rateLimitMsg{}
-		if err = json.NewDecoder(resp.Body).Decode(&rlMsg); err != nil {
+	if resp.StatusCode == http.StatusTooManyRequests {
+		rateLimitMsg := struct {
+			RetryAfter int64 `json:"retry_after"`
+		}{}
+		if err = json.NewDecoder(resp.Body).Decode(&rateLimitMsg); err != nil {
 			return -1, fmt.Errorf("decode rate limit message: %v", err)
 		}
 
-		return rlMsg.RetryAfter, nil
+		return rateLimitMsg.RetryAfter, nil
 	} else if resp.StatusCode/100 != 2 {
-		data, _ := ioutil.ReadAll(resp.Body)
-		return -1, fmt.Errorf("%s", data)
+		data, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return -1, fmt.Errorf("read HTTP response body: %v", err)
+		}
+		return -1, fmt.Errorf("non-success response status code %d with body: %s", resp.StatusCode, data)
 	}
 
 	return -1, nil
 }
 
-func (d *discord) write(msg *Message) {
-	payload, err := buildDiscordPayload(d.username, msg)
+func (l *discordLogger) Write(m Messager) error {
+	payload, err := l.buildPayload(m)
 	if err != nil {
-		d.errorChan <- fmt.Errorf("discord: builddiscordPayload: %v", err)
-		return
+		return fmt.Errorf("build payload: %v", err)
 	}
 
-	const RETRY_TIMES = 3
-	// Due to discord limit, try at most x times with respect to "retry_after" parameter.
-	for i := 1; i <= 3; i++ {
-		retryAfter, err := d.postMessage(bytes.NewReader([]byte(payload)))
+	const retryTimes = 3
+
+	// Try at most X times with respect to "retry_after" parameter.
+	for i := 1; i <= retryTimes; i++ {
+		retryAfter, err := l.postMessage(bytes.NewReader([]byte(payload)))
 		if err != nil {
-			d.errorChan <- fmt.Errorf("discord: postMessage: %v", err)
-			return
+			return fmt.Errorf("post message: %v", err)
 		}
 
 		if retryAfter > 0 {
@@ -178,41 +157,46 @@ func (d *discord) write(msg *Message) {
 			continue
 		}
 
-		return
+		return nil
 	}
 
-	d.errorChan <- fmt.Errorf("discord: failed to send message after %d retries", RETRY_TIMES)
-}
-
-func (d *discord) Start() {
-LOOP:
-	for {
-		select {
-		case msg := <-d.msgChan:
-			d.write(msg)
-		case <-d.quitChan:
-			break LOOP
-		}
-	}
-
-	for {
-		if len(d.msgChan) == 0 {
-			break
-		}
-
-		d.write(<-d.msgChan)
-	}
-	d.quitChan <- struct{}{} // Notify the cleanup is done.
-}
-
-func (d *discord) Destroy() {
-	d.quitChan <- struct{}{}
-	<-d.quitChan
-
-	close(d.msgChan)
-	close(d.quitChan)
+	return fmt.Errorf("gave up after %d retries", retryTimes)
 }
 
 func init() {
-	Register(DISCORD, newDiscord)
+	NewRegister(ModeDiscord, func(v interface{}) (Logger, error) {
+		cfg, ok := v.(DiscordConfig)
+		if !ok {
+			return nil, fmt.Errorf("invalid config object: want %T got %T", DiscordConfig{}, v)
+		}
+
+		if cfg.URL == "" {
+			return nil, errors.New("empty URL")
+		}
+
+		titles := discordTitles
+		if cfg.Titles != nil {
+			if len(cfg.Titles) != 5 {
+				return nil, fmt.Errorf("titles must have exact 5 elements, but got %d", len(cfg.Titles))
+			}
+			titles = cfg.Titles
+		}
+
+		colors := discordColors
+		if cfg.Colors != nil {
+			if len(cfg.Colors) != 5 {
+				return nil, fmt.Errorf("colors must have exact 5 elements, but got %d", len(cfg.Colors))
+			}
+			colors = cfg.Colors
+		}
+
+		return &discordLogger{
+			level:    cfg.Level,
+			url:      cfg.URL,
+			username: cfg.Username,
+			titles:   titles,
+			colors:   colors,
+			client:   http.DefaultClient,
+		}, nil
+	})
 }

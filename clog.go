@@ -1,148 +1,92 @@
-// Copyright 2017 Unknwon
-//
-// Licensed under the Apache License, Version 2.0 (the "License"): you may
-// not use this file except in compliance with the License. You may obtain
-// a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-// License for the specific language governing permissions and limitations
-// under the License.
-
-// Clog is a channel-based logging package for Go.
+// Package clog is a channel-based logging package for Go.
 package clog
 
 import (
 	"fmt"
 	"os"
-	"path/filepath"
-	"runtime"
-	"strings"
 )
 
+// Mode is the output source.
+type Mode string
+
+// Level is the logging level.
+type Level int
+
+// Available logging levels.
 const (
-	_VERSION = "1.2.0"
+	LevelTrace Level = iota
+	LevelInfo
+	LevelWarn
+	LevelError
+	LevelFatal
 )
 
-// Version returns current version of the package.
-func Version() string {
-	return _VERSION
-}
-
-type (
-	MODE  string
-	LEVEL int
-)
-
-const (
-	CONSOLE MODE = "console"
-	FILE    MODE = "file"
-	SLACK   MODE = "slack"
-	DISCORD MODE = "discord"
-)
-
-const (
-	TRACE LEVEL = iota
-	INFO
-	WARN
-	ERROR
-	FATAL
-)
-
-var formats = map[LEVEL]string{
-	TRACE: "[TRACE] ",
-	INFO:  "[ INFO] ",
-	WARN:  "[ WARN] ",
-	ERROR: "[ERROR] ",
-	FATAL: "[FATAL] ",
-}
-
-// isValidLevel returns true if given level is in the valid range.
-func isValidLevel(level LEVEL) bool {
-	return level >= TRACE && level <= FATAL
-}
-
-// Message represents a log message to be processed.
-type Message struct {
-	Level LEVEL
-	Body  string
-}
-
-func Write(level LEVEL, skip int, format string, v ...interface{}) {
-	msg := &Message{
-		Level: level,
-	}
-
-	// Only error and fatal information needs locate position for debugging.
-	// But if skip is 0 means caller doesn't care so we can skip.
-	if msg.Level >= ERROR && skip > 0 {
-		pc, file, line, ok := runtime.Caller(skip)
-		if ok {
-			// Get caller function name.
-			fn := runtime.FuncForPC(pc)
-			var fnName string
-			if fn == nil {
-				fnName = "?()"
-			} else {
-				fnName = strings.TrimLeft(filepath.Ext(fn.Name()), ".") + "()"
-			}
-
-			if len(file) > 20 {
-				file = "..." + file[len(file)-20:]
-			}
-			msg.Body = formats[level] + fmt.Sprintf("[%s:%d %s] ", file, line, fnName) + fmt.Sprintf(format, v...)
-		}
-	}
-	if len(msg.Body) == 0 {
-		msg.Body = formats[level] + fmt.Sprintf(format, v...)
-	}
-
-	for i := range receivers {
-		if receivers[i].Level() > level {
-			continue
-		}
-
-		receivers[i].msgChan <- msg
+func (l Level) String() string {
+	switch l {
+	case LevelTrace:
+		return "TRACE"
+	case LevelInfo:
+		return "INFO"
+	case LevelWarn:
+		return "WARN"
+	case LevelError:
+		return "ERROR"
+	case LevelFatal:
+		return "FATAL"
+	default:
+		fmt.Printf("Unexpected Level value: %v\n", int(l))
+		panic("unreachable")
 	}
 }
 
+// Trace writes formatted log in Trace level.
 func Trace(format string, v ...interface{}) {
-	Write(TRACE, 0, format, v...)
+	mgr.write(LevelTrace, 0, format, v...)
 }
 
+// Info writes formatted log in Info level.
 func Info(format string, v ...interface{}) {
-	Write(INFO, 0, format, v...)
+	mgr.write(LevelInfo, 0, format, v...)
 }
 
+// Warn writes formatted log in Warn level.
 func Warn(format string, v ...interface{}) {
-	Write(WARN, 0, format, v...)
+	mgr.write(LevelWarn, 0, format, v...)
 }
 
-func Error(skip int, format string, v ...interface{}) {
-	Write(ERROR, skip, format, v...)
+// Error writes formatted log in Error level.
+func Error(format string, v ...interface{}) {
+	ErrorDepth(4, format, v...)
 }
 
-func Fatal(skip int, format string, v ...interface{}) {
-	Write(FATAL, skip, format, v...)
-	Shutdown()
+// ErrorDepth writes formatted log with given skip depth in Error level.
+func ErrorDepth(skip int, format string, v ...interface{}) {
+	mgr.write(LevelError, skip, format, v...)
+}
+
+// Fatal writes formatted log in Fatal level then exits.
+func Fatal(format string, v ...interface{}) {
+	FatalDepth(4, format, v...)
+}
+
+// isTestEnv is true when running tests.
+// In test environment, Fatal or FatalDepth won't stop the manager or exit the program.
+var isTestEnv = false
+
+// FatalDepth writes formatted log with given skip depth in Fatal level then exits.
+func FatalDepth(skip int, format string, v ...interface{}) {
+	mgr.write(LevelFatal, skip, format, v...)
+
+	if isTestEnv {
+		return
+	}
+
+	Stop()
 	os.Exit(1)
 }
 
-func Shutdown() {
-	for i := range receivers {
-		receivers[i].Destroy()
-	}
-
-	// Shutdown the error handling goroutine.
-	quitChan <- struct{}{}
-	for {
-		if len(errorChan) == 0 {
-			break
-		}
-
-		fmt.Printf("clog: unable to write message: %v\n", <-errorChan)
-	}
+// Stop propagates cancellation to all loggers and waits for completion.
+// This function should always be called before exiting the program.
+func Stop() {
+	mgr.stop()
 }
