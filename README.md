@@ -59,13 +59,14 @@ func init() {
 
 - The `0` is an integer type so it is used as underlying buffer size. In this case, `0` creates synchronized logger (call hangs until write is finished).
 - Any non-integer type is used as the config object, in this case `ConsoleConfig` is the respective config object for the console logger.
-- The `LevelTrace` used here is the lowest logging level, meaning prints every log to the console. All levels from lowest to highest are: `LevelTrace`, `LevelInfo`, `LevelWarn`, `LevelError`, `LevelFatal`, each of has at least one repective function, e.g. `log.Trace`, `log.Info`, `log.Warn`, `log.Error` and `log.Fatal`.
+- The `LevelTrace` used here is the lowest logging level, meaning prints every log to the console. All levels from lowest to highest are: `LevelTrace`, `LevelInfo`, `LevelWarn`, `LevelError`, `LevelFatal`, each of them has at least one respective function, e.g. `log.Trace`, `log.Info`, `log.Warn`, `log.Error` and `log.Fatal`.
 
 In production, you may want to make log less verbose and be asynchronous:
 
 ```go
 func init() {
-	// The buffer size mainly depends on how many logs will be produced at the same time, 100 is a good default.
+	// The buffer size mainly depends on number of logs could be produced at the same time, 
+	// 100 is a good default.
 	err := log.New(log.ModeConsole, 100, log.ConsoleConfig{
 		Level:      log.LevelInfo,
 	})
@@ -78,11 +79,11 @@ func init() {
 - When you set level to be `LevelInfo`, calls to the `log.Trace` will be simply noop.
 - The console logger comes with color output, but for non-colorable destination, the color output will be disabled automatically.
 
-Other builtin loggers are file (`log.ModeFile`), Slack (`log.ModeSlack`) and Discord (`log.Discord`), see later in the documentation for usage details.
+Other builtin loggers are file (`log.ModeFile`), Slack (`log.ModeSlack`) and Discord (`log.ModeDiscord`), see later sections in the documentation for usage details.
 
 ### Multiple Loggers
 
-You can have multiple loggers in different modes with levels.
+You can have multiple loggers in different modes across levels.
 
 ```go
 func init() {
@@ -91,8 +92,8 @@ func init() {
 		panic("unable to create new logger: " + err.Error())
 	}
 	err := log.New(log.ModeFile, log.FileConfig{
-		Level:              log.LevelInfo,
-		Filename:           "clog.log",
+		Level:    log.LevelInfo,
+		Filename: "clog.log",
 	})
 	if err != nil {
 		panic("unable to create new logger: " + err.Error())
