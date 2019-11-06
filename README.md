@@ -80,6 +80,28 @@ func init() {
 
 Other builtin loggers are file (`log.ModeFile`), Slack (`log.ModeSlack`) and Discord (`log.Discord`), see later in the documentation for usage details.
 
+### Multiple Loggers
+
+You can have multiple loggers in different modes with levels.
+
+```go
+func init() {
+	err := log.New(log.ModeConsole)
+	if err != nil {
+		panic("unable to create new logger: " + err.Error())
+	}
+	err := log.New(log.ModeFile, log.FileConfig{
+		Level:              log.LevelInfo,
+		Filename:           "clog.log",
+	})
+	if err != nil {
+		panic("unable to create new logger: " + err.Error())
+	}
+}
+```
+
+In this example, all logs will be printed to console, and only logs with level Info or higher (i.e. Warn, Error and Fatal) will be written into file.
+
 ### Caller Location
 
 When using `log.Error` and `log.Fatal` functions, the caller location is written along with logs. 
