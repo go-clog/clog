@@ -1,16 +1,12 @@
 package clog
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/fatih/color"
 )
 
-// ModeConsole is used to indicate console logger.
-const ModeConsole Mode = "console"
-
-// Console color set for different levels.
+// consoleColors is the color set for different levels.
 var consoleColors = []func(a ...interface{}) string{
 	color.New(color.FgBlue).SprintFunc(),   // Trace
 	color.New(color.FgGreen).SprintFunc(),  // Info
@@ -28,16 +24,8 @@ type ConsoleConfig struct {
 var _ Logger = (*consoleLogger)(nil)
 
 type consoleLogger struct {
-	level Level
+	*noopLogger
 	*log.Logger
-}
-
-func (*consoleLogger) Mode() Mode {
-	return ModeConsole
-}
-
-func (l *consoleLogger) Level() Level {
-	return l.level
 }
 
 func (l *consoleLogger) Write(m Messager) error {
@@ -45,20 +33,42 @@ func (l *consoleLogger) Write(m Messager) error {
 	return nil
 }
 
-func init() {
-	NewRegister(ModeConsole, func(v interface{}) (Logger, error) {
-		if v == nil {
-			v = ConsoleConfig{}
+// DefaultConsoleName is the default name for the console logger.
+const DefaultConsoleName = "console"
+
+// NewConsole initializes and appends a new console logger with default name
+// to the managed list.
+func NewConsole(vs ...interface{}) error {
+	return NewConsoleWithName(DefaultConsoleName, vs...)
+}
+
+// NewConsoleWithName initializes and appends a new console logger with given
+// name to the managed list.
+func NewConsoleWithName(name string, vs ...interface{}) error {
+	return New(name, ConsoleIniter(), vs...)
+}
+
+// ConsoleIniter returns the initer for the console logger.
+func ConsoleIniter() Initer {
+	return func(name string, vs ...interface{}) (Logger, error) {
+		var cfg *ConsoleConfig
+		for i := range vs {
+			switch v := vs[i].(type) {
+			case ConsoleConfig:
+				cfg = &v
+			}
 		}
 
-		cfg, ok := v.(ConsoleConfig)
-		if !ok {
-			return nil, fmt.Errorf("invalid config object: want %T got %T", ConsoleConfig{}, v)
+		if cfg == nil {
+			cfg = &ConsoleConfig{}
 		}
 
 		return &consoleLogger{
-			level:  cfg.Level,
+			noopLogger: &noopLogger{
+				name:  name,
+				level: cfg.Level,
+			},
 			Logger: log.New(color.Output, "", log.Ldate|log.Ltime),
 		}, nil
-	})
+	}
 }

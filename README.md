@@ -28,7 +28,7 @@ import (
 )
 
 func init() {
-	err := log.New(log.ModeConsole)
+	err := log.NewConsole()
 	if err != nil {
 		panic("unable to create new logger: " + err.Error())
 	}
@@ -48,7 +48,7 @@ The code inside `init` function is equivalent to the following:
 
 ```go
 func init() {
-	err := log.New(log.ModeConsole, 0, log.ConsoleConfig{
+	err := log.NewConsole(0, log.ConsoleConfig{
 		Level: log.LevelTrace,
 	})
 	if err != nil {
@@ -67,7 +67,7 @@ In production, you may want to make log less verbose and be asynchronous:
 func init() {
 	// The buffer size mainly depends on number of logs could be produced at the same time, 
 	// 100 is a good default.
-	err := log.New(log.ModeConsole, 100, log.ConsoleConfig{
+	err := log.NewConsole(100, log.ConsoleConfig{
 		Level:      log.LevelInfo,
 	})
 	if err != nil {
@@ -79,7 +79,7 @@ func init() {
 - When you set level to be `LevelInfo`, calls to the `log.Trace` will be simply noop.
 - The console logger comes with color output, but for non-colorable destination, the color output will be disabled automatically.
 
-Other builtin loggers are file (`log.ModeFile`), Slack (`log.ModeSlack`) and Discord (`log.ModeDiscord`), see later sections in the documentation for usage details.
+Other builtin loggers are file (`log.NewFile`), Slack (`log.NewSlack`) and Discord (`log.NewDiscord`), see later sections in the documentation for usage details.
 
 ### Multiple Loggers
 
@@ -87,11 +87,11 @@ You can have multiple loggers in different modes across levels.
 
 ```go
 func init() {
-	err := log.New(log.ModeConsole)
+	err := log.NewConsole()
 	if err != nil {
 		panic("unable to create new logger: " + err.Error())
 	}
-	err := log.New(log.ModeFile, log.FileConfig{
+	err := log.NewFile(log.FileConfig{
 		Level:    log.LevelInfo,
 		Filename: "clog.log",
 	})
@@ -131,7 +131,7 @@ File logger is the single most powerful builtin logger, it has the ability to ro
 
 ```go
 func init() {
-	err := log.New(log.ModeFile, 100, log.FileConfig{
+	err := log.NewFile(100, log.FileConfig{
 		Level:              log.LevelInfo,
 		Filename:           "clog.log",  
 		FileRotationConfig: log.FileRotationConfig {
@@ -165,7 +165,7 @@ Slack logger is also supported in a simple way:
 
 ```go
 func init() {
-	err := log.New(log.ModeSlack, 100, log.SlackConfig{
+	err := log.NewSlack(100, log.SlackConfig{
 		Level: log.LevelInfo,
 		URL:   "https://url-to-slack-webhook",
 	})
@@ -183,7 +183,7 @@ Discord logger is supported in rich format via [Embed Object](https://discordapp
 
 ```go
 func init() {
-	err := log.New(log.ModeDiscord, 100, log.DiscordConfig{
+	err := log.NewDiscord(100, log.DiscordConfig{
 		Level: log.LevelInfo,
 		URL:   "https://url-to-discord-webhook",
 	})
@@ -204,8 +204,6 @@ Here is an example which sends all logs to a channel, we call it `chanLogger` he
 ```go
 import log "unknwon.dev/clog/v2"
 
-const modeChannel log.Mode = "channel"
-
 type chanConfig struct {
 	c chan string
 }
@@ -213,35 +211,38 @@ type chanConfig struct {
 var _ log.Logger = (*chanLogger)(nil)
 
 type chanLogger struct {
+	name  string
 	level log.Level
 	c     chan string
 }
 
-func (*chanLogger) Mode() log.Mode     { return modeChannel }
+func (l *chanLogger) Name() string     { return l.name }
 func (l *chanLogger) Level() log.Level { return l.level }
 
-func (l *chanLogger) Write(m Messager) error {
+func (l *chanLogger) Write(m log.Messager) error {
 	l.c <- m.String()
 	return nil
 }
 
-func init() {
-	log.NewRegister(modeChannel, func(v interface{}) (log.Logger, error) {
-		if v == nil {
-			v = chanConfig{}
+func main() {
+	log.New("channel", func(name string, vs ...interface{}) (log.Logger, error) {
+		var cfg *chanLogger
+		for i := range vs {
+			switch v := vs[i].(type) {
+			case chanLogger:
+				cfg = &v
+			}
 		}
 
-		cfg, ok := v.(chanConfig)
-		if !ok {
-			return nil, fmt.Errorf("invalid config object: want %T got %T", chanConfig{}, v)
-		}
-
-		if cfg.c == nil {
+		if cfg == nil {
+			return nil, fmt.Errorf("config object with the type '%T' not found", chanLogger{})
+		} else if cfg.c == nil {
 			return nil, errors.New("channel is nil")
 		}
 
 		return &chanLogger{
-			c: cfg.c,
+			name: name,
+			c:    cfg.c,
 		}, nil
 	})
 }

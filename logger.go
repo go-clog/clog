@@ -9,33 +9,31 @@ import (
 	"github.com/fatih/color"
 )
 
-// Logger is an interface for a logger with a specific mode and level.
+// Logger is an interface for a logger with a specific name and level.
 type Logger interface {
-	// Mode returns the mode of the logger.
-	Mode() Mode
+	// Name returns the name can used to identify the logger.
+	Name() string
 	// Level returns the minimum logging level of the logger.
 	Level() Level
 	// Write processes a Messager entry.
 	Write(Messager) error
 }
 
-// Register is a factory function taht returns a new logger.
-// It accepts a configuration struct specifically for the logger.
-type Register func(interface{}) (Logger, error)
+var _ Logger = (*noopLogger)(nil)
 
-var registers = map[Mode]Register{}
+type noopLogger struct {
+	name  string
+	level Level
+}
 
-// NewRegister adds a new factory function as a Register to the global map.
-//
-// This function is not concurrent safe.
-func NewRegister(mode Mode, r Register) {
-	if r == nil {
-		panic("register is nil")
+func (l *noopLogger) Name() string           { return l.name }
+func (l *noopLogger) Level() Level           { return l.level }
+func (l *noopLogger) Write(_ Messager) error { return nil }
+
+func noopIniter(name string, _ ...interface{}) Initer {
+	return func(string, ...interface{}) (Logger, error) {
+		return &noopLogger{name: name}, nil
 	}
-	if registers[mode] != nil {
-		panic(fmt.Sprintf("register with mode %q already exists", mode))
-	}
-	registers[mode] = r
 }
 
 type cancelableLogger struct {
@@ -53,11 +51,16 @@ func (l *cancelableLogger) error(err error) {
 		return
 	}
 
-	errLogger.Print(errSprintf("[clog] [%s]: %v", l.Mode(), err))
+	errLogger.Print(errSprintf("[clog] [%s]: %v", l.Name(), err))
 }
 
+const (
+	stateStopping int64 = 0
+	stateRunning  int64 = 1
+)
+
 type manager struct {
-	state   int64 // 0=stopping, 1=running
+	state   int64
 	ctx     context.Context
 	cancel  context.CancelFunc
 	loggers []*cancelableLogger
@@ -88,7 +91,7 @@ func (m *manager) write(level Level, skip int, format string, v ...interface{}) 
 
 func (m *manager) stop() {
 	// Make sure cancellation is only propagated once to prevent deadlock of WaitForStop.
-	if !atomic.CompareAndSwapInt64(&m.state, 1, 0) {
+	if !atomic.CompareAndSwapInt64(&m.state, stateRunning, stateStopping) {
 		return
 	}
 
@@ -100,36 +103,31 @@ func (m *manager) stop() {
 
 var mgr *manager
 
-func initManager() {
+func init() {
 	ctx, cancel := context.WithCancel(context.Background())
 	mgr = &manager{
-		state:  1,
+		state:  stateRunning,
 		ctx:    ctx,
 		cancel: cancel,
 	}
 }
 
-func init() {
-	initManager()
-}
+// Initer takes a name and arbitrary number of parameters needed for initalization
+// and returns an initalized logger.
+type Initer func(string, ...interface{}) (Logger, error)
 
 // New initializes and appends a new logger to the managed list.
 // Calling this function multiple times will overwrite previous initialized
-// logger with the same mode.
+// logger with the same name.
 //
 // Any integer type (i.e. int, int32, int64) will be used as buffer size.
-// Otherwise, the value will be used as config object to the logger.
+// Otherwise, the value will be passed to the initer.
 //
 // This function is not concurrent safe.
-//func New(mode Mode, bufferSize int64, cfg interface{}) error {
-func New(mode Mode, opts ...interface{}) error {
-	r, ok := registers[mode]
-	if !ok {
-		return fmt.Errorf("no register for %q", mode)
-	}
-
+func New(name string, initer Initer, opts ...interface{}) error {
 	bufferSize := 0
-	var cfg interface{}
+
+	vs := opts[:0]
 	for i := range opts {
 		switch opt := opts[i].(type) {
 		case int:
@@ -139,11 +137,11 @@ func New(mode Mode, opts ...interface{}) error {
 		case int64:
 			bufferSize = int(opt)
 		default:
-			cfg = opt
+			vs = append(vs, opt)
 		}
 	}
 
-	l, err := r(cfg)
+	l, err := initer(name, vs...)
 	if err != nil {
 		return fmt.Errorf("initialize logger: %v", err)
 	}
@@ -163,7 +161,7 @@ func New(mode Mode, opts ...interface{}) error {
 	// Check and replace previous logger
 	found := false
 	for i, l := range mgr.loggers {
-		if l.Mode() == mode {
+		if l.Name() == name {
 			found = true
 
 			// Release previous logger
@@ -204,13 +202,13 @@ func New(mode Mode, opts ...interface{}) error {
 	return nil
 }
 
-// Remove removes a logger with given mode from the managed list.
+// Remove removes a logger with given name from the managed list.
 //
 // This function is not concurrent safe.
-func Remove(mode Mode) {
+func Remove(name string) {
 	loggers := mgr.loggers[:0]
 	for _, l := range mgr.loggers {
-		if l.Mode() == mode {
+		if l.Name() == name {
 			go func(l *cancelableLogger) {
 				l.cancel()
 				<-l.done

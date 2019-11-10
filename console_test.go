@@ -1,45 +1,51 @@
 package clog
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func Test_ModeConsole(t *testing.T) {
-	defer Remove(ModeConsole)
+func Test_consoleLogger(t *testing.T) {
+	testName := "Test_consoleLogger"
+	defer Remove(DefaultConsoleName)
+	defer Remove(testName)
 
 	tests := []struct {
 		name      string
+		mode      string
 		config    interface{}
 		wantLevel Level
 		wantErr   error
 	}{
 		{
 			name:    "nil config",
+			mode:    DefaultConsoleName,
 			wantErr: nil,
 		},
 		{
 			name: "valid config",
+			mode: DefaultConsoleName,
 			config: ConsoleConfig{
 				Level: LevelInfo,
 			},
 			wantErr: nil,
 		},
 		{
-			name:    "invalid config",
-			config:  "random things",
-			wantErr: errors.New("initialize logger: invalid config object: want clog.ConsoleConfig got string"),
+			name:    "custom name",
+			mode:    testName,
+			wantErr: nil,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.wantErr, New(ModeConsole, 10, tt.config))
+			assert.Equal(t, tt.wantErr, NewConsoleWithName(tt.mode, 10, tt.config))
 		})
 	}
 
-	assert.Equal(t, 1, mgr.len())
-	assert.Equal(t, ModeConsole, mgr.loggers[0].Mode())
+	assert.Equal(t, 2, mgr.len())
+	assert.Equal(t, DefaultConsoleName, mgr.loggers[0].Name())
 	assert.Equal(t, LevelInfo, mgr.loggers[0].Level())
+	assert.Equal(t, testName, mgr.loggers[1].Name())
+	assert.Equal(t, LevelTrace, mgr.loggers[1].Level())
 }

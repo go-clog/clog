@@ -6,9 +6,6 @@ import (
 	"os"
 )
 
-// Mode is the output source.
-type Mode string
-
 // Level is the logging level.
 type Level int
 

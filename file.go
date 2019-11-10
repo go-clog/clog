@@ -12,9 +12,6 @@ import (
 	"time"
 )
 
-// ModeFile is used to indicate file logger.
-const ModeFile Mode = "file"
-
 const (
 	simpleDateFormat = "2006-01-02"
 	logPrefixLength  = len("2017/02/06 21:20:08 ")
@@ -52,7 +49,7 @@ type fileLogger struct {
 	// It is only true when the logger is created by NewFileWriter.
 	standalone bool
 
-	level Level
+	*noopLogger
 
 	filename       string
 	rotationConfig FileRotationConfig
@@ -64,14 +61,6 @@ type fileLogger struct {
 	currentLines int64
 
 	*log.Logger
-}
-
-func (*fileLogger) Mode() Mode {
-	return ModeFile
-}
-
-func (l *fileLogger) Level() Level {
-	return l.level
 }
 
 var newLineBytes = []byte("\n")
@@ -234,21 +223,43 @@ func (l *fileLogger) init() error {
 	return nil
 }
 
-func init() {
-	NewRegister(ModeFile, func(v interface{}) (Logger, error) {
-		if v == nil {
-			v = FileConfig{
+// DefaultFileName is the default name for the file logger.
+const DefaultFileName = "file"
+
+// NewFile initializes and appends a new file logger with default name
+// to the managed list.
+func NewFile(vs ...interface{}) error {
+	return NewFileWithName(DefaultFileName, vs...)
+}
+
+// NewFileWithName initializes and appends a new file logger with given
+// name to the managed list.
+func NewFileWithName(name string, vs ...interface{}) error {
+	return New(name, FileIniter(), vs...)
+}
+
+// FileIniter returns the initer for the file logger.
+func FileIniter() Initer {
+	return func(name string, vs ...interface{}) (Logger, error) {
+		var cfg *FileConfig
+		for i := range vs {
+			switch v := vs[i].(type) {
+			case FileConfig:
+				cfg = &v
+			}
+		}
+
+		if cfg == nil {
+			cfg = &FileConfig{
 				Filename: "clog.log",
 			}
 		}
 
-		cfg, ok := v.(FileConfig)
-		if !ok {
-			return nil, fmt.Errorf("invalid config object: want %T got %T", FileConfig{}, v)
-		}
-
 		l := &fileLogger{
-			level:          cfg.Level,
+			noopLogger: &noopLogger{
+				name:  name,
+				level: cfg.Level,
+			},
 			filename:       cfg.Filename,
 			rotationConfig: cfg.FileRotationConfig,
 		}
@@ -258,7 +269,7 @@ func init() {
 		}
 
 		return l, nil
-	})
+	}
 }
 
 var _ io.Writer = (*fileWriter)(nil)
