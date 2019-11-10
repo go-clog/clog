@@ -37,37 +37,47 @@ func (l *chanLogger) Write(m Messager) error {
 }
 
 func Test_chanLogger(t *testing.T) {
-	mode1 := Mode("mode1")
-	level1 := LevelTrace
-	NewRegister(mode1, func(v interface{}) (Logger, error) {
-		cfg, ok := v.(chanConfig)
-		if !ok {
-			return nil, fmt.Errorf("invalid config object: want %T got %T", chanConfig{}, v)
-		}
-		return &chanLogger{
-			c: cfg.c,
-			noopLogger: &noopLogger{
-				mode:  mode1,
-				level: level1,
-			},
-		}, nil
-	})
+	initer := func(name string, level Level) Initer {
+		return func(_ string, vs ...interface{}) (Logger, error) {
+			var cfg *chanConfig
+			for i := range vs {
+				switch v := vs[i].(type) {
+				case chanConfig:
+					cfg = &v
+				}
+			}
 
-	mode2 := Mode("mode2")
-	level2 := LevelError
-	NewRegister(mode2, func(v interface{}) (Logger, error) {
-		cfg, ok := v.(chanConfig)
-		if !ok {
-			return nil, fmt.Errorf("invalid config object: want %T got %T", &chanConfig{}, v)
+			if cfg == nil {
+				return nil, fmt.Errorf("config object with the type '%T' not found", chanConfig{})
+			}
+
+			return &chanLogger{
+				c: cfg.c,
+				noopLogger: &noopLogger{
+					name:  name,
+					level: level,
+				},
+			}, nil
 		}
-		return &chanLogger{
-			c: cfg.c,
-			noopLogger: &noopLogger{
-				mode:  mode2,
-				level: level2,
-			},
-		}, nil
-	})
+	}
+
+	test1 := "mode1"
+	test1Initer := initer(test1, LevelTrace)
+
+	test2 := "mode2"
+	test2Initer := initer(test2, LevelError)
+
+	c1 := make(chan string)
+	c2 := make(chan string)
+
+	defer Remove(test1)
+	defer Remove(test2)
+	assert.Nil(t, New(test1, test1Initer, 1, chanConfig{
+		c: c1,
+	}))
+	assert.Nil(t, New(test2, test2Initer, 1, chanConfig{
+		c: c2,
+	}))
 
 	tests := []struct {
 		name         string
@@ -106,19 +116,6 @@ func Test_chanLogger(t *testing.T) {
 			containsStr2: "()] log message",
 		},
 	}
-
-	c1 := make(chan string)
-	c2 := make(chan string)
-
-	defer Remove(mode1)
-	defer Remove(mode2)
-	assert.Nil(t, New(mode1, 1, chanConfig{
-		c: c1,
-	}))
-	assert.Nil(t, New(mode2, 1, chanConfig{
-		c: c2,
-	}))
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, 2, mgr.len())

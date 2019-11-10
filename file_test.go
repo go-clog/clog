@@ -10,21 +10,26 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func Test_ModeFile(t *testing.T) {
-	defer Remove(ModeFile)
+func Test_fileLogger(t *testing.T) {
+	testName := "Test_fileLogger"
+	defer Remove(DefaultFileName)
+	defer Remove(testName)
 
 	tests := []struct {
 		name      string
+		mode      string
 		config    interface{}
 		wantLevel Level
 		wantErr   error
 	}{
 		{
 			name:    "nil config",
+			mode:    DefaultFileName,
 			wantErr: nil,
 		},
 		{
 			name: "valid config",
+			mode: DefaultFileName,
 			config: FileConfig{
 				Level:    LevelInfo,
 				Filename: filepath.Join(os.TempDir(), "Test_ModeFile"),
@@ -32,10 +37,11 @@ func Test_ModeFile(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name:    "invalid config",
-			config:  "random things",
-			wantErr: errors.New("initialize logger: invalid config object: want clog.FileConfig got string"),
+			name:    "custom name",
+			mode:    testName,
+			wantErr: nil,
 		},
+
 		{
 			name: "invalid filename",
 			config: FileConfig{
@@ -46,13 +52,15 @@ func Test_ModeFile(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.wantErr, New(ModeFile, 10, tt.config))
+			assert.Equal(t, tt.wantErr, NewFileWithName(tt.mode, 10, tt.config))
 		})
 	}
 
-	assert.Equal(t, 1, mgr.len())
-	assert.Equal(t, ModeFile, mgr.loggers[0].Mode())
+	assert.Equal(t, 2, mgr.len())
+	assert.Equal(t, DefaultFileName, mgr.loggers[0].Name())
 	assert.Equal(t, LevelInfo, mgr.loggers[0].Level())
+	assert.Equal(t, testName, mgr.loggers[1].Name())
+	assert.Equal(t, LevelTrace, mgr.loggers[1].Level())
 }
 
 func Test_rotateFilename(t *testing.T) {

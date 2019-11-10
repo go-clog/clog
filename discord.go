@@ -12,9 +12,6 @@ import (
 	"time"
 )
 
-// ModeDiscord is used to indicate Discord logger.
-const ModeDiscord Mode = "discord"
-
 type (
 	discordEmbed struct {
 		Title       string `json:"title"`
@@ -67,21 +64,14 @@ type DiscordConfig struct {
 var _ Logger = (*discordLogger)(nil)
 
 type discordLogger struct {
-	level    Level
+	*noopLogger
+
 	url      string
 	username string
 	titles   []string
 	colors   []int
 
 	client *http.Client
-}
-
-func (*discordLogger) Mode() Mode {
-	return ModeDiscord
-}
-
-func (l *discordLogger) Level() Level {
-	return l.level
 }
 
 func (l *discordLogger) buildPayload(m Messager) (string, error) {
@@ -163,18 +153,35 @@ func (l *discordLogger) Write(m Messager) error {
 	return fmt.Errorf("gave up after %d retries", retryTimes)
 }
 
-func init() {
-	NewRegister(ModeDiscord, func(v interface{}) (Logger, error) {
-		if v == nil {
-			v = DiscordConfig{}
+// DefaultDiscordName is the default name for the Discord logger.
+const DefaultDiscordName = "discord"
+
+// NewDiscord initializes and appends a new Discord logger with default name
+// to the managed list.
+func NewDiscord(vs ...interface{}) error {
+	return NewDiscordWithName(DefaultDiscordName, vs...)
+}
+
+// NewDiscordWithName initializes and appends a new Discord logger with given
+// name to the managed list.
+func NewDiscordWithName(name string, vs ...interface{}) error {
+	return New(name, DiscordIniter(), vs...)
+}
+
+// DiscordIniter returns the initer for the Discord logger.
+func DiscordIniter() Initer {
+	return func(name string, vs ...interface{}) (Logger, error) {
+		var cfg *DiscordConfig
+		for i := range vs {
+			switch v := vs[i].(type) {
+			case DiscordConfig:
+				cfg = &v
+			}
 		}
 
-		cfg, ok := v.(DiscordConfig)
-		if !ok {
-			return nil, fmt.Errorf("invalid config object: want %T got %T", DiscordConfig{}, v)
-		}
-
-		if cfg.URL == "" {
+		if cfg == nil {
+			return nil, fmt.Errorf("config object with the type '%T' not found", DiscordConfig{})
+		} else if cfg.URL == "" {
 			return nil, errors.New("empty URL")
 		}
 
@@ -195,12 +202,14 @@ func init() {
 		}
 
 		return &discordLogger{
-			level:    cfg.Level,
-			url:      cfg.URL,
+			noopLogger: &noopLogger{
+				name:  name,
+				level: cfg.Level,
+			},
 			username: cfg.Username,
 			titles:   titles,
 			colors:   colors,
 			client:   http.DefaultClient,
 		}, nil
-	})
+	}
 }

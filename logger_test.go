@@ -7,155 +7,79 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewRegister(t *testing.T) {
-	tests := []struct {
-		name string
-		run  func()
-		want string
-	}{
-		{
-			name: "success",
-			run: func() {
-				NewRegister("TestNewRegister_success",
-					func(_ interface{}) (Logger, error) { return nil, nil },
-				)
-			},
-			want: "",
-		},
-		{
-			name: "nil register",
-			run: func() {
-				NewRegister("", nil)
-			},
-			want: "register is nil",
-		},
-		{
-			name: "duplicated register",
-			run: func() {
-				NewRegister("TestNewRegister_duplicated_register",
-					func(_ interface{}) (Logger, error) { return nil, nil },
-				)
-				NewRegister("TestNewRegister_duplicated_register",
-					func(_ interface{}) (Logger, error) { return nil, nil },
-				)
-			},
-			want: `register with mode "TestNewRegister_duplicated_register" already exists`,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			defer func() {
-				err := recover()
-				if tt.want == "" {
-					assert.Nil(t, err)
-				} else {
-					assert.Equal(t, tt.want, err)
-				}
-			}()
-
-			tt.run()
-		})
-	}
-}
-
-var _ Logger = (*noopLogger)(nil)
-
-type noopLogger struct {
-	mode  Mode
-	level Level
-}
-
-func (l *noopLogger) Mode() Mode             { return l.mode }
-func (l *noopLogger) Level() Level           { return l.level }
-func (l *noopLogger) Write(_ Messager) error { return nil }
-
 func TestNew(t *testing.T) {
-	testModeGood := Mode("TestNew_good")
-	testModeBad := Mode("TestNew_bad")
-	defer Remove(testModeGood)
-	defer Remove(testModeBad)
+	testGood := "TestNew_good"
+	testGoodIniter := noopIniter(testGood)
 
-	NewRegister(testModeGood,
-		func(_ interface{}) (Logger, error) {
-			return &noopLogger{
-				mode: testModeGood,
-			}, nil
-		},
-	)
-	NewRegister(testModeBad,
-		func(_ interface{}) (Logger, error) {
-			return nil, errors.New("random error")
-		},
-	)
+	testBad := "TestNew_bad"
+	testBadIniter := func(string, ...interface{}) (Logger, error) {
+		return nil, errors.New("random error")
+	}
+
+	defer Remove(testGood)
+	defer Remove(testBad)
 
 	tests := []struct {
 		name       string
-		mode       Mode
+		mode       string
+		initer     Initer
 		bufferSize interface{}
 		want       error
 	}{
 		{
 			name:       "success",
-			mode:       testModeGood,
+			mode:       testGood,
+			initer:     testGoodIniter,
 			bufferSize: 1,
 			want:       nil,
 		},
 		{
 			name:       "success",
-			mode:       testModeGood,
+			mode:       testGood,
+			initer:     testGoodIniter,
 			bufferSize: int32(1),
 			want:       nil,
 		},
 		{
 			name:       "success",
-			mode:       testModeGood,
+			mode:       testGood,
+			initer:     testGoodIniter,
 			bufferSize: int64(1),
 			want:       nil,
 		},
 		{
-			name: "no register",
-			mode: "no_register",
-			want: errors.New(`no register for "no_register"`),
+			name:   "initialize error",
+			mode:   testBad,
+			initer: testBadIniter,
+			want:   errors.New("initialize logger: random error"),
 		},
 		{
-			name: "initialize error",
-			mode: testModeBad,
-			want: errors.New("initialize logger: random error"),
-		},
-		{
-			name: "success overwrite",
-			mode: testModeGood,
-			want: nil,
+			name:   "success overwrite",
+			mode:   testGood,
+			initer: testGoodIniter,
+			want:   nil,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := New(tt.mode, tt.bufferSize)
+			err := New(tt.mode, tt.initer, tt.bufferSize)
 			assert.Equal(t, tt.want, err)
 		})
 	}
 }
 
 func TestRemove(t *testing.T) {
-	testMode1 := Mode("TestRemove1")
-	NewRegister(testMode1, func(_ interface{}) (Logger, error) {
-		return &noopLogger{
-			mode: testMode1,
-		}, nil
-	})
-	assert.Nil(t, New(testMode1, -1))
+	test1 := "TestRemove_1"
+	test1Initer := noopIniter(test1)
+	assert.Nil(t, New(test1, test1Initer, -1))
 
-	testMode2 := Mode("TestRemove2")
-	NewRegister(testMode2, func(_ interface{}) (Logger, error) {
-		return &noopLogger{
-			mode: testMode2,
-		}, nil
-	})
-	assert.Nil(t, New(testMode2, -1))
+	test2 := "TestRemove_2"
+	test2Initer := noopIniter(test2)
+	assert.Nil(t, New(test2, test2Initer, -1))
 
 	tests := []struct {
 		name       string
-		mode       Mode
+		mode       string
 		numLoggers int
 	}{
 		{
@@ -165,12 +89,12 @@ func TestRemove(t *testing.T) {
 		},
 		{
 			name:       "remove one",
-			mode:       testMode1,
+			mode:       test1,
 			numLoggers: 1,
 		},
 		{
 			name:       "remove two",
-			mode:       testMode2,
+			mode:       test2,
 			numLoggers: 0,
 		},
 	}

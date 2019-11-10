@@ -10,21 +10,26 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func Test_ModeSlack(t *testing.T) {
-	defer Remove(ModeSlack)
+func Test_slackLogger(t *testing.T) {
+	testName := "Test_slackLogger"
+	defer Remove(DefaultSlackName)
+	defer Remove(testName)
 
 	tests := []struct {
 		name      string
+		mode      string
 		config    interface{}
 		wantLevel Level
 		wantErr   error
 	}{
 		{
 			name:    "nil config",
-			wantErr: errors.New("initialize logger: empty URL"),
+			mode:    DefaultSlackName,
+			wantErr: errors.New("initialize logger: config object with the type 'clog.SlackConfig' not found"),
 		},
 		{
 			name: "valid config",
+			mode: DefaultSlackName,
 			config: SlackConfig{
 				Level:  LevelInfo,
 				URL:    "https://slack.com",
@@ -33,9 +38,18 @@ func Test_ModeSlack(t *testing.T) {
 			wantErr: nil,
 		},
 		{
+			name: "custom name",
+			mode: testName,
+			config: SlackConfig{
+				URL: "https://slack.com",
+			},
+			wantErr: nil,
+		},
+
+		{
 			name:    "invalid config",
 			config:  "random things",
-			wantErr: errors.New("initialize logger: invalid config object: want clog.SlackConfig got string"),
+			wantErr: errors.New("initialize logger: config object with the type 'clog.SlackConfig' not found"),
 		},
 		{
 			name:    "invalid URL",
@@ -53,13 +67,15 @@ func Test_ModeSlack(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.wantErr, New(ModeSlack, 10, tt.config))
+			assert.Equal(t, tt.wantErr, NewSlackWithName(tt.mode, 10, tt.config))
 		})
 	}
 
-	assert.Equal(t, 1, mgr.len())
-	assert.Equal(t, ModeSlack, mgr.loggers[0].Mode())
+	assert.Equal(t, 2, mgr.len())
+	assert.Equal(t, DefaultSlackName, mgr.loggers[0].Name())
 	assert.Equal(t, LevelInfo, mgr.loggers[0].Level())
+	assert.Equal(t, testName, mgr.loggers[1].Name())
+	assert.Equal(t, LevelTrace, mgr.loggers[1].Level())
 }
 
 func Test_slackLogger_buildPayload(t *testing.T) {

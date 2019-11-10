@@ -11,21 +11,26 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func Test_ModeDiscord(t *testing.T) {
-	defer Remove(ModeDiscord)
+func Test_discordLogger(t *testing.T) {
+	testName := "Test_ModeDiscord"
+	defer Remove(DefaultDiscordName)
+	defer Remove(testName)
 
 	tests := []struct {
 		name      string
+		mode      string
 		config    interface{}
 		wantLevel Level
 		wantErr   error
 	}{
 		{
 			name:    "nil config",
-			wantErr: errors.New("initialize logger: empty URL"),
+			mode:    DefaultDiscordName,
+			wantErr: errors.New("initialize logger: config object with the type 'clog.DiscordConfig' not found"),
 		},
 		{
 			name: "valid config",
+			mode: DefaultDiscordName,
 			config: DiscordConfig{
 				Level:  LevelInfo,
 				URL:    "https://discordapp.com",
@@ -35,9 +40,18 @@ func Test_ModeDiscord(t *testing.T) {
 			wantErr: nil,
 		},
 		{
+			name: "custom name",
+			mode: testName,
+			config: DiscordConfig{
+				URL: "https://discordapp.com",
+			},
+			wantErr: nil,
+		},
+
+		{
 			name:    "invalid config",
 			config:  "random things",
-			wantErr: errors.New("initialize logger: invalid config object: want clog.DiscordConfig got string"),
+			wantErr: errors.New("initialize logger: config object with the type 'clog.DiscordConfig' not found"),
 		},
 		{
 			name:    "invalid URL",
@@ -63,13 +77,15 @@ func Test_ModeDiscord(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.wantErr, New(ModeDiscord, 10, tt.config))
+			assert.Equal(t, tt.wantErr, NewDiscordWithName(tt.mode, 10, tt.config))
 		})
 	}
 
-	assert.Equal(t, 1, mgr.len())
-	assert.Equal(t, ModeDiscord, mgr.loggers[0].Mode())
+	assert.Equal(t, 2, mgr.len())
+	assert.Equal(t, DefaultDiscordName, mgr.loggers[0].Name())
 	assert.Equal(t, LevelInfo, mgr.loggers[0].Level())
+	assert.Equal(t, testName, mgr.loggers[1].Name())
+	assert.Equal(t, LevelTrace, mgr.loggers[1].Level())
 }
 
 func Test_discordLogger_buildPayload(t *testing.T) {

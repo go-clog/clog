@@ -10,9 +10,6 @@ import (
 	"net/http"
 )
 
-// ModeSlack is used to indicate Slack logger.
-const ModeSlack Mode = "slack"
-
 type slackAttachment struct {
 	Text  string `json:"text"`
 	Color string `json:"color"`
@@ -44,19 +41,12 @@ type SlackConfig struct {
 var _ Logger = (*slackLogger)(nil)
 
 type slackLogger struct {
-	level  Level
+	*noopLogger
+
 	url    string
 	colors []string
 
 	client *http.Client
-}
-
-func (*slackLogger) Mode() Mode {
-	return ModeSlack
-}
-
-func (l *slackLogger) Level() Level {
-	return l.level
 }
 
 func (l *slackLogger) buildPayload(m Messager) (string, error) {
@@ -105,18 +95,35 @@ func (l *slackLogger) Write(m Messager) error {
 	return nil
 }
 
-func init() {
-	NewRegister(ModeSlack, func(v interface{}) (Logger, error) {
-		if v == nil {
-			v = SlackConfig{}
+// DefaultSlackName is the default name for the Slack logger.
+const DefaultSlackName = "slack"
+
+// NewSlack initializes and appends a new Slack logger with default name
+// to the managed list.
+func NewSlack(vs ...interface{}) error {
+	return NewSlackWithName(DefaultSlackName, vs...)
+}
+
+// NewSlackWithName initializes and appends a new Slack logger with given
+// name to the managed list.
+func NewSlackWithName(name string, vs ...interface{}) error {
+	return New(name, SlackIniter(), vs...)
+}
+
+// SlackIniter returns the initer for the Slack logger.
+func SlackIniter() Initer {
+	return func(name string, vs ...interface{}) (Logger, error) {
+		var cfg *SlackConfig
+		for i := range vs {
+			switch v := vs[i].(type) {
+			case SlackConfig:
+				cfg = &v
+			}
 		}
 
-		cfg, ok := v.(SlackConfig)
-		if !ok {
-			return nil, fmt.Errorf("invalid config object: want %T got %T", SlackConfig{}, v)
-		}
-
-		if cfg.URL == "" {
+		if cfg == nil {
+			return nil, fmt.Errorf("config object with the type '%T' not found", SlackConfig{})
+		} else if cfg.URL == "" {
 			return nil, errors.New("empty URL")
 		}
 
@@ -129,10 +136,13 @@ func init() {
 		}
 
 		return &slackLogger{
-			level:  cfg.Level,
+			noopLogger: &noopLogger{
+				name:  name,
+				level: cfg.Level,
+			},
 			url:    cfg.URL,
 			colors: colors,
 			client: http.DefaultClient,
 		}, nil
-	})
+	}
 }
