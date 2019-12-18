@@ -199,6 +199,10 @@ func (l *fileLogger) write(m Messager) (int, error) {
 			l.openDay = now.Day()
 			l.currentSize = 0
 			l.currentLines = 0
+
+			if err := l.deleteOutdatedFiles(); err != nil {
+				return bytesWrote, fmt.Errorf("delete outdated file: %v", err)
+			}
 		}
 	}
 	return bytesWrote, nil
