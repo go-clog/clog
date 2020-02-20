@@ -226,16 +226,16 @@ func (l *chanLogger) Write(m log.Messager) error {
 
 func main() {
 	log.New("channel", func(name string, vs ...interface{}) (log.Logger, error) {
-		var cfg *chanLogger
+		var cfg *chanConfig
 		for i := range vs {
 			switch v := vs[i].(type) {
-			case chanLogger:
+			case chanConfig:
 				cfg = &v
 			}
 		}
 
 		if cfg == nil {
-			return nil, fmt.Errorf("config object with the type '%T' not found", chanLogger{})
+			return nil, fmt.Errorf("config object with the type '%T' not found", chanConfig{})
 		} else if cfg.c == nil {
 			return nil, errors.New("channel is nil")
 		}
