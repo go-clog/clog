@@ -71,6 +71,11 @@ func (m *manager) len() int {
 }
 
 func (m *manager) write(level Level, skip int, format string, v ...interface{}) {
+	if mgr.len() == 0 {
+		errLogger.Print(errSprintf("[clog] no logger is available"))
+		return
+	}
+
 	var msg *message
 	for i := range mgr.loggers {
 		if mgr.loggers[i].Level() > level {
@@ -82,10 +87,6 @@ func (m *manager) write(level Level, skip int, format string, v ...interface{}) 
 		}
 
 		mgr.loggers[i].msgChan <- msg
-	}
-
-	if msg == nil {
-		errLogger.Print(errSprintf("[clog] no logger is available"))
 	}
 }
 
