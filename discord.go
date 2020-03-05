@@ -206,6 +206,7 @@ func DiscordIniter() Initer {
 				name:  name,
 				level: cfg.Level,
 			},
+			url:      cfg.URL,
 			username: cfg.Username,
 			titles:   titles,
 			colors:   colors,
