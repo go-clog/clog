@@ -5,12 +5,17 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func Test_fileLogger(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping testing on Windows")
+	}
+
 	testName := "Test_fileLogger"
 	defer Remove(DefaultFileName)
 	defer Remove(testName)

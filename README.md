@@ -1,6 +1,6 @@
 # Clog 
 
-[![Build Status](https://img.shields.io/travis/go-clog/clog/master.svg?style=for-the-badge&logo=travis)](https://travis-ci.org/go-clog/clog)
+[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/go-clog/clog/Go?logo=github&style=for-the-badge)](https://github.com/go-clog/clog/actions?query=workflow%3AGo)
 [![codecov](https://img.shields.io/codecov/c/github/go-clog/clog/master?logo=codecov&style=for-the-badge)](https://codecov.io/gh/go-clog/clog)
 [![GoDoc](https://img.shields.io/badge/GoDoc-Reference-blue?style=for-the-badge&logo=go)](https://pkg.go.dev/unknwon.dev/clog/v2?tab=doc)
 [![Sourcegraph](https://img.shields.io/badge/view%20on-Sourcegraph-brightgreen.svg?style=for-the-badge&logo=sourcegraph)](https://sourcegraph.com/github.com/go-clog/clog)
