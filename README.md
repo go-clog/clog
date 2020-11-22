@@ -51,9 +51,26 @@ The code inside `init` function is equivalent to the following:
 
 ```go
 func init() {
-	err := log.NewConsole(0, log.ConsoleConfig{
-		Level: log.LevelTrace,
-	})
+	err := log.NewConsole(0, 
+        log.ConsoleConfig{
+		    Level: log.LevelTrace,
+	    },
+    )
+	if err != nil {
+		panic("unable to create new logger: " + err.Error())
+	}
+}
+```
+
+Or expand further:
+
+```go
+func init() {
+	err := log.NewConsoleWithName(log.DefaultConsoleName, 0, 
+        log.ConsoleConfig{
+		    Level: log.LevelTrace,
+	    },
+    )
 	if err != nil {
 		panic("unable to create new logger: " + err.Error())
 	}
@@ -70,9 +87,11 @@ In production, you may want to make log less verbose and be asynchronous:
 func init() {
 	// The buffer size mainly depends on number of logs could be produced at the same time, 
 	// 100 is a good default.
-	err := log.NewConsole(100, log.ConsoleConfig{
-		Level:      log.LevelInfo,
-	})
+	err := log.NewConsole(100,
+        log.ConsoleConfig{
+		    Level:      log.LevelInfo,
+	    },
+    )
 	if err != nil {
 		panic("unable to create new logger: " + err.Error())
 	}
@@ -94,10 +113,12 @@ func init() {
 	if err != nil {
 		panic("unable to create new logger: " + err.Error())
 	}
-	err := log.NewFile(log.FileConfig{
-		Level:    log.LevelInfo,
-		Filename: "clog.log",
-	})
+	err := log.NewFile(
+        log.FileConfig{
+		    Level:    log.LevelInfo,
+		    Filename: "clog.log",
+	    },
+    )
 	if err != nil {
 		panic("unable to create new logger: " + err.Error())
 	}
@@ -150,14 +171,16 @@ File logger is the single most powerful builtin logger, it has the ability to ro
 
 ```go
 func init() {
-	err := log.NewFile(100, log.FileConfig{
-		Level:              log.LevelInfo,
-		Filename:           "clog.log",  
-		FileRotationConfig: log.FileRotationConfig {
-			Rotate: true,
-			Daily:  true,
-		},
-	})
+	err := log.NewFile(100, 
+        log.FileConfig{
+            Level:              log.LevelInfo,
+            Filename:           "clog.log",  
+            FileRotationConfig: log.FileRotationConfig {
+                Rotate: true,
+                Daily:  true,
+            },
+        },
+    )
 	if err != nil {
 		panic("unable to create new logger: " + err.Error())
 	}
@@ -168,10 +191,12 @@ In case you have some other packages that write to a file, and you want to take 
 
 ```go
 func init() {
-	w, err := log.NewFileWriter("filename", log.FileRotationConfig{
-		Rotate: true,
-		Daily:  true,
-	})
+	w, err := log.NewFileWriter("filename",
+        log.FileRotationConfig{
+            Rotate: true,
+            Daily:  true,
+        },
+    )
 	if err != nil {
 		panic("unable to create new logger: " + err.Error())
 	}
@@ -184,10 +209,12 @@ Slack logger is also supported in a simple way:
 
 ```go
 func init() {
-	err := log.NewSlack(100, log.SlackConfig{
-		Level: log.LevelInfo,
-		URL:   "https://url-to-slack-webhook",
-	})
+	err := log.NewSlack(100,
+        log.SlackConfig{
+            Level: log.LevelInfo,
+            URL:   "https://url-to-slack-webhook",
+        },
+    )
 	if err != nil {
 		panic("unable to create new logger: " + err.Error())
 	}
@@ -202,10 +229,12 @@ Discord logger is supported in rich format via [Embed Object](https://discordapp
 
 ```go
 func init() {
-	err := log.NewDiscord(100, log.DiscordConfig{
-		Level: log.LevelInfo,
-		URL:   "https://url-to-discord-webhook",
-	})
+	err := log.NewDiscord(100,
+        log.DiscordConfig{
+            Level: log.LevelInfo,
+            URL:   "https://url-to-discord-webhook",
+        },
+    )
 	if err != nil {
 		panic("unable to create new logger: " + err.Error())
 	}
