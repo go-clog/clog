@@ -106,6 +106,22 @@ func init() {
 
 In this example, all logs will be printed to console, and only logs with level Info or higher (i.e. Warn, Error and Fatal) will be written into file.
 
+### Write to a specific logger
+
+When multiple loggers are registered, it is also possible to write logs to a special logger by giving its name.
+
+```go
+func main() {
+	log.TraceTo(log.DefaultConsoleName, "Hello %s!", "World")
+	log.InfoTo(log.DefaultConsoleName, "Hello %s!", "World")
+	log.WarnTo(log.DefaultConsoleName, "Hello %s!", "World")
+	log.ErrorTo(log.DefaultConsoleName, "So bad... %v", err)
+	log.FatalTo(log.DefaultConsoleName, "Boom! %v", err)
+
+	// ...
+}
+```
+
 ### Caller Location
 
 When using `log.Error` and `log.Fatal` functions, the caller location is written along with logs. 

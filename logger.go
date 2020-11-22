@@ -55,21 +55,23 @@ func (l *cancelableLogger) error(err error) {
 }
 
 const (
-	stateStopping int64 = 0
-	stateRunning  int64 = 1
+	stateStopping int64 = iota
+	stateRunning
 )
 
 type manager struct {
-	state   int64
-	ctx     context.Context
-	cancel  context.CancelFunc
-	loggers []*cancelableLogger
+	state         int64
+	ctx           context.Context
+	cancel        context.CancelFunc
+	loggers       []*cancelableLogger
+	loggersByName map[string]*cancelableLogger
 }
 
 func (m *manager) len() int {
 	return len(m.loggers)
 }
 
+// write attempts to send message to all loggers.
 func (m *manager) write(level Level, skip int, format string, v ...interface{}) {
 	if mgr.len() == 0 {
 		errLogger.Print(errSprintf("[clog] no logger is available"))
@@ -90,6 +92,21 @@ func (m *manager) write(level Level, skip int, format string, v ...interface{}) 
 	}
 }
 
+// writeTo attempts to send message to the logger with given name.
+func (m *manager) writeTo(name string, level Level, skip int, format string, v ...interface{}) {
+	l, ok := mgr.loggersByName[name]
+	if !ok {
+		errLogger.Print(errSprintf("[clog] logger with name %q is not available", name))
+		return
+	}
+
+	if l.Level() > level {
+		return
+	}
+
+	l.msgChan <- newMessage(level, skip, format, v...)
+}
+
 func (m *manager) stop() {
 	// Make sure cancellation is only propagated once to prevent deadlock of WaitForStop.
 	if !atomic.CompareAndSwapInt64(&m.state, stateRunning, stateStopping) {
@@ -107,9 +124,10 @@ var mgr *manager
 func init() {
 	ctx, cancel := context.WithCancel(context.Background())
 	mgr = &manager{
-		state:  stateRunning,
-		ctx:    ctx,
-		cancel: cancel,
+		state:         stateRunning,
+		ctx:           ctx,
+		cancel:        cancel,
+		loggersByName: make(map[string]*cancelableLogger),
 	}
 }
 
@@ -124,7 +142,7 @@ type Initer func(string, ...interface{}) (Logger, error)
 // Any integer type (i.e. int, int32, int64) will be used as buffer size.
 // Otherwise, the value will be passed to the initer.
 //
-// This function is not concurrent safe.
+// NOTE: This function is not concurrent safe.
 func New(name string, initer Initer, opts ...interface{}) error {
 	bufferSize := 0
 
@@ -176,6 +194,7 @@ func New(name string, initer Initer, opts ...interface{}) error {
 	if !found {
 		mgr.loggers = append(mgr.loggers, cl)
 	}
+	mgr.loggersByName[name] = cl
 
 	go func() {
 	loop:
@@ -205,7 +224,7 @@ func New(name string, initer Initer, opts ...interface{}) error {
 
 // Remove removes a logger with given name from the managed list.
 //
-// This function is not concurrent safe.
+// NOTE: This function is not concurrent safe.
 func Remove(name string) {
 	loggers := mgr.loggers[:0]
 	for _, l := range mgr.loggers {
@@ -219,4 +238,5 @@ func Remove(name string) {
 		loggers = append(loggers, l)
 	}
 	mgr.loggers = loggers
+	delete(mgr.loggersByName, name)
 }
