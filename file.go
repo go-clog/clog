@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -121,7 +120,7 @@ func (l *fileLogger) initRotation() error {
 
 	// If there is any content in the file, count the number of lines.
 	if l.rotationConfig.MaxLines > 0 && l.currentSize > 0 {
-		data, err := ioutil.ReadFile(l.filename)
+		data, err := os.ReadFile(l.filename)
 		if err != nil {
 			return fmt.Errorf("read file %q: %v", l.filename, err)
 		}

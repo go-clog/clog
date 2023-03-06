@@ -62,7 +62,7 @@ func chanLoggerIniter(name string, level Level) Initer {
 
 func Test_chanLogger(t *testing.T) {
 	test1 := "mode1"
-	test1Initer := chanLoggerIniter(test1, LevelTrace)
+	test1Initer := chanLoggerIniter(test1, LevelDebug)
 
 	test2 := "mode2"
 	test2Initer := chanLoggerIniter(test2, LevelError)
@@ -87,8 +87,8 @@ func Test_chanLogger(t *testing.T) {
 	}{
 		{
 			name:         "trace",
-			fn:           Trace,
-			containsStr1: "[TRACE] log message",
+			fn:           Debug,
+			containsStr1: "[DEBUG] log message",
 			containsStr2: "",
 		},
 		{
@@ -133,10 +133,10 @@ func Test_chanLogger(t *testing.T) {
 
 func Test_writeToNamedLogger(t *testing.T) {
 	test1 := "alice"
-	test1Initer := chanLoggerIniter(test1, LevelTrace)
+	test1Initer := chanLoggerIniter(test1, LevelDebug)
 
 	test2 := "bob"
-	test2Initer := chanLoggerIniter(test2, LevelTrace)
+	test2Initer := chanLoggerIniter(test2, LevelDebug)
 
 	c1 := make(chan string)
 	c2 := make(chan string)
@@ -158,8 +158,8 @@ func Test_writeToNamedLogger(t *testing.T) {
 	}{
 		{
 			name:         "trace",
-			fn:           TraceTo,
-			containsStr1: "[TRACE] log message",
+			fn:           DebugTo,
+			containsStr1: "[DEBUG] log message",
 			containsStr2: "",
 		},
 		{

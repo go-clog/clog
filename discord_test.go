@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"testing"
 
@@ -85,7 +85,7 @@ func Test_discordLogger(t *testing.T) {
 	assert.Equal(t, DefaultDiscordName, mgr.loggers[0].Name())
 	assert.Equal(t, LevelInfo, mgr.loggers[0].Level())
 	assert.Equal(t, testName, mgr.loggers[1].Name())
-	assert.Equal(t, LevelTrace, mgr.loggers[1].Level())
+	assert.Equal(t, LevelDebug, mgr.loggers[1].Level())
 }
 
 func Test_discordLogger_buildPayload(t *testing.T) {
@@ -105,7 +105,7 @@ func Test_discordLogger_buildPayload(t *testing.T) {
 			{
 				name: "trace",
 				msg: &message{
-					level: LevelTrace,
+					level: LevelDebug,
 					body:  "[TRACE] test message",
 				},
 				wantTitle: discordTitles[0],
@@ -186,7 +186,7 @@ func Test_discordLogger_buildPayload(t *testing.T) {
 			{
 				name: "trace",
 				msg: &message{
-					level: LevelTrace,
+					level: LevelDebug,
 					body:  "[TRACE] test message",
 				},
 				wantTitle: l.titles[0],
@@ -237,7 +237,7 @@ func Test_discordLogger_buildPayload(t *testing.T) {
 			{
 				name: "trace",
 				msg: &message{
-					level: LevelTrace,
+					level: LevelDebug,
 					body:  "test message",
 				},
 				wantTitle: l.titles[0],
@@ -283,7 +283,7 @@ func Test_discordLogger_postMessage(t *testing.T) {
 
 				return &http.Response{
 					StatusCode: statusCode,
-					Body:       ioutil.NopCloser(bytes.NewBufferString(respBody)),
+					Body:       io.NopCloser(bytes.NewBufferString(respBody)),
 					Header:     make(http.Header),
 				}
 			}),

@@ -1,4 +1,4 @@
-# Clog 
+# Clog
 
 [![GitHub Workflow Status](https://img.shields.io/github/workflow/status/go-clog/clog/Go?logo=github&style=for-the-badge)](https://github.com/go-clog/clog/actions?query=workflow%3AGo)
 [![codecov](https://img.shields.io/codecov/c/github/go-clog/clog/master?logo=codecov&style=for-the-badge)](https://codecov.io/gh/go-clog/clog)
@@ -13,10 +13,10 @@ This package supports multiple loggers across different levels of logging. It us
 
 ## Installation
 
-The minimum requirement of Go is **1.11**.
+The minimum requirement of Go is **1.19**.
 
 	go get unknwon.dev/clog/v2
-    
+
 Please apply `-u` flag to update in the future.
 
 ## Getting Started
@@ -51,7 +51,7 @@ The code inside `init` function is equivalent to the following:
 
 ```go
 func init() {
-	err := log.NewConsole(0, 
+	err := log.NewConsole(0,
         log.ConsoleConfig{
 		    Level: log.LevelTrace,
 	    },
@@ -66,7 +66,7 @@ Or expand further:
 
 ```go
 func init() {
-	err := log.NewConsoleWithName(log.DefaultConsoleName, 0, 
+	err := log.NewConsoleWithName(log.DefaultConsoleName, 0,
         log.ConsoleConfig{
 		    Level: log.LevelTrace,
 	    },
@@ -85,7 +85,7 @@ In production, you may want to make log less verbose and be asynchronous:
 
 ```go
 func init() {
-	// The buffer size mainly depends on number of logs could be produced at the same time, 
+	// The buffer size mainly depends on number of logs could be produced at the same time,
 	// 100 is a good default.
 	err := log.NewConsole(100,
         log.ConsoleConfig{
@@ -145,7 +145,7 @@ func main() {
 
 ### Caller Location
 
-When using `log.Error` and `log.Fatal` functions, the caller location is written along with logs. 
+When using `log.Error` and `log.Fatal` functions, the caller location is written along with logs.
 
 ```go
 func main() {
@@ -171,10 +171,10 @@ File logger is the single most powerful builtin logger, it has the ability to ro
 
 ```go
 func init() {
-	err := log.NewFile(100, 
+	err := log.NewFile(100,
         log.FileConfig{
             Level:              log.LevelInfo,
-            Filename:           "clog.log",  
+            Filename:           "clog.log",
             FileRotationConfig: log.FileRotationConfig {
                 Rotate: true,
                 Daily:  true,

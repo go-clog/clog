@@ -11,7 +11,7 @@ type Level int
 
 // Available logging levels.
 const (
-	LevelTrace Level = iota
+	LevelDebug Level = iota
 	LevelInfo
 	LevelWarn
 	LevelError
@@ -20,8 +20,8 @@ const (
 
 func (l Level) String() string {
 	switch l {
-	case LevelTrace:
-		return "TRACE"
+	case LevelDebug:
+		return "DEBUG"
 	case LevelInfo:
 		return "INFO"
 	case LevelWarn:
@@ -36,9 +36,9 @@ func (l Level) String() string {
 	}
 }
 
-// Trace writes formatted log in Trace level.
-func Trace(format string, v ...interface{}) {
-	mgr.write(LevelTrace, 0, format, v...)
+// Debug writes formatted log in Debug level.
+func Debug(format string, v ...interface{}) {
+	mgr.write(LevelDebug, 0, format, v...)
 }
 
 // Info writes formatted log in Info level.
@@ -85,9 +85,9 @@ func FatalDepth(skip int, format string, v ...interface{}) {
 	exit()
 }
 
-// TraceTo writes formatted log in Trace level to the logger with given name.
-func TraceTo(name, format string, v ...interface{}) {
-	mgr.writeTo(name, LevelTrace, 0, format, v...)
+// DebugTo writes formatted log in Debug level to the logger with given name.
+func DebugTo(name, format string, v ...interface{}) {
+	mgr.writeTo(name, LevelDebug, 0, format, v...)
 }
 
 // InfoTo writes formatted log in Info level to the logger with given name.

@@ -16,11 +16,11 @@ func Test_newMessage(t *testing.T) {
 			want   string
 		}{
 			{
-				name:   "trace",
-				level:  LevelTrace,
-				format: "a trace log: %v",
+				name:   "debug",
+				level:  LevelDebug,
+				format: "a debug log: %v",
 				v:      []interface{}{"value"},
-				want:   "[TRACE] a trace log: value",
+				want:   "[DEBUG] a debug log: value",
 			},
 			{
 				name:   "info",
@@ -69,11 +69,11 @@ func Test_newMessage(t *testing.T) {
 			contains string
 		}{
 			{
-				name:     "trace",
-				level:    LevelTrace,
-				format:   "a trace log: %v",
+				name:     "debug",
+				level:    LevelDebug,
+				format:   "a debug log: %v",
 				v:        []interface{}{"value"},
-				contains: "[TRACE] a trace log: value",
+				contains: "[DEBUG] a debug log: value",
 			},
 			{
 				name:     "info",

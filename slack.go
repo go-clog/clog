@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 )
 
@@ -20,7 +19,7 @@ type slackPayload struct {
 }
 
 var slackColors = []string{
-	"",        // Trace
+	"",        // Debug
 	"#3aa3e3", // Info
 	"warning", // Warn
 	"danger",  // Error
@@ -34,7 +33,7 @@ type SlackConfig struct {
 	// Slack webhook URL.
 	URL string
 	// Colors for different levels, must have exact 5 elements in the order of
-	// Trace, Info, Warn, Error, and Fatal.
+	// Debug, Info, Warn, Error, and Fatal.
 	Colors []string
 }
 
@@ -73,7 +72,7 @@ func (l *slackLogger) postMessage(r io.Reader) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode/100 != 2 {
-		data, err := ioutil.ReadAll(resp.Body)
+		data, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return fmt.Errorf("read HTTP response body: %v", err)
 		}

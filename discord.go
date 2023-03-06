@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
@@ -28,7 +27,7 @@ type (
 
 var (
 	discordTitles = []string{
-		"Trace",
+		"Debug",
 		"Information",
 		"Warning",
 		"Error",
@@ -36,7 +35,7 @@ var (
 	}
 
 	discordColors = []int{
-		0,        // Trace
+		0,        // Debug
 		3843043,  // Info
 		16761600, // Warn
 		13041721, // Error
@@ -54,10 +53,10 @@ type DiscordConfig struct {
 	// Leave empty to use default as set in the Discord.
 	Username string
 	// Title for different levels, must have exact 5 elements in the order of
-	// Trace, Info, Warn, Error, and Fatal.
+	// Debug, Info, Warn, Error, and Fatal.
 	Titles []string
 	// Colors for different levels, must have exact 5 elements in the order of
-	// Trace, Info, Warn, Error, and Fatal.
+	// Debug, Info, Warn, Error, and Fatal.
 	Colors []int
 }
 
@@ -117,7 +116,7 @@ func (l *discordLogger) postMessage(r io.Reader) (int64, error) {
 
 		return rateLimitMsg.RetryAfter, nil
 	} else if resp.StatusCode/100 != 2 {
-		data, err := ioutil.ReadAll(resp.Body)
+		data, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return -1, fmt.Errorf("read HTTP response body: %v", err)
 		}

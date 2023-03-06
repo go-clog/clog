@@ -2,7 +2,6 @@ package clog
 
 import (
 	"errors"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -65,7 +64,7 @@ func Test_fileLogger(t *testing.T) {
 	assert.Equal(t, DefaultFileName, mgr.loggers[0].Name())
 	assert.Equal(t, LevelInfo, mgr.loggers[0].Level())
 	assert.Equal(t, testName, mgr.loggers[1].Name())
-	assert.Equal(t, LevelTrace, mgr.loggers[1].Level())
+	assert.Equal(t, LevelDebug, mgr.loggers[1].Level())
 }
 
 func Test_rotateFilename(t *testing.T) {
@@ -74,11 +73,11 @@ func Test_rotateFilename(t *testing.T) {
 
 	filename := rotateFilename("test/Test_rotateFilename.log", "2017-03-05")
 	assert.Equal(t, "test/Test_rotateFilename.log.2017-03-05", filename)
-	assert.Nil(t, ioutil.WriteFile(filename, []byte(""), os.ModePerm))
+	assert.Nil(t, os.WriteFile(filename, []byte(""), os.ModePerm))
 
 	filename = rotateFilename("test/Test_rotateFilename.log", "2017-03-05")
 	assert.Equal(t, "test/Test_rotateFilename.log.2017-03-05.001", filename)
-	assert.Nil(t, ioutil.WriteFile(filename, []byte(""), os.ModePerm))
+	assert.Nil(t, os.WriteFile(filename, []byte(""), os.ModePerm))
 
 	filename = rotateFilename("test/Test_rotateFilename.log", "2017-03-05")
 	assert.Equal(t, "test/Test_rotateFilename.log.2017-03-05.002", filename)

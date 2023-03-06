@@ -3,7 +3,7 @@ package clog
 import (
 	"bytes"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"testing"
 
@@ -75,7 +75,7 @@ func Test_slackLogger(t *testing.T) {
 	assert.Equal(t, DefaultSlackName, mgr.loggers[0].Name())
 	assert.Equal(t, LevelInfo, mgr.loggers[0].Level())
 	assert.Equal(t, testName, mgr.loggers[1].Name())
-	assert.Equal(t, LevelTrace, mgr.loggers[1].Level())
+	assert.Equal(t, LevelDebug, mgr.loggers[1].Level())
 }
 
 func Test_slackLogger_buildPayload(t *testing.T) {
@@ -92,7 +92,7 @@ func Test_slackLogger_buildPayload(t *testing.T) {
 			{
 				name: "trace",
 				msg: &message{
-					level: LevelTrace,
+					level: LevelDebug,
 					body:  "test message",
 				},
 				want: `{"attachments":[{"text":"test message","color":""}]}`,
@@ -152,7 +152,7 @@ func Test_slackLogger_buildPayload(t *testing.T) {
 			{
 				name: "trace",
 				msg: &message{
-					level: LevelTrace,
+					level: LevelDebug,
 					body:  "test message",
 				},
 				want: `{"attachments":[{"text":"test message","color":"#1"}]}`,
@@ -223,7 +223,7 @@ func Test_slackLogger_postMessage(t *testing.T) {
 
 				return &http.Response{
 					StatusCode: statusCode,
-					Body:       ioutil.NopCloser(bytes.NewBufferString(respBody)),
+					Body:       io.NopCloser(bytes.NewBufferString(respBody)),
 					Header:     make(http.Header),
 				}
 			}),

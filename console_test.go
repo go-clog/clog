@@ -47,5 +47,5 @@ func Test_consoleLogger(t *testing.T) {
 	assert.Equal(t, DefaultConsoleName, mgr.loggers[0].Name())
 	assert.Equal(t, LevelInfo, mgr.loggers[0].Level())
 	assert.Equal(t, testName, mgr.loggers[1].Name())
-	assert.Equal(t, LevelTrace, mgr.loggers[1].Level())
+	assert.Equal(t, LevelDebug, mgr.loggers[1].Level())
 }
