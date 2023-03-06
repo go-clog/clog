@@ -8,7 +8,7 @@ import (
 
 // consoleColors is the color set for different levels.
 var consoleColors = []func(a ...interface{}) string{
-	color.New(color.FgBlue).SprintFunc(),   // Trace
+	color.New(color.FgBlue).SprintFunc(),   // Debug
 	color.New(color.FgGreen).SprintFunc(),  // Info
 	color.New(color.FgYellow).SprintFunc(), // Warn
 	color.New(color.FgRed).SprintFunc(),    // Error
