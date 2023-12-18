@@ -101,7 +101,7 @@ func rotateFilename(filename, date string) string {
 
 func (l *fileLogger) deleteOutdatedFiles() error {
 	return filepath.Walk(filepath.Dir(l.filename), func(path string, fi os.FileInfo, _ error) error {
-		if !fi.IsDir() &&
+		if fi != nil && !fi.IsDir() &&
 			fi.ModTime().Before(time.Now().Add(-24*time.Hour*time.Duration(l.rotationConfig.MaxDays))) &&
 			strings.HasPrefix(filepath.Base(path), filepath.Base(l.filename)) {
 			return os.Remove(path)
